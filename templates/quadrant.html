@@ -1,15 +1,15 @@
-    <div class="layout layout--col layout--top py--2 px--3.5">
+    <div class="layout layout--col layout--top py--1 px--3.5">
 
       <!-- Header -->
       <table class="w--full" style="border-collapse:collapse;">
         <tr>
           <td class="title title--small" style="letter-spacing:1px;"><b>CLAUDE CODE</b></td>
-          <td class="title title--small text--right"><b>{{ sub }}</b> {{ tier }}</td>
+          <td class="title title--small text--right"><b>{{ sub }}</b> {{ tier }}{% if active > 0 %} ● {{ active }}{% endif %}</td>
         </tr>
       </table>
 
       {% if u_session != "—" %}
-      <table class="w--full my--0.5" style="border-collapse:collapse;">
+      <table class="w--full" style="border-collapse:collapse;">
         <tr>
           <td class="title title--small py--0.5"><b>S {{ u_session }}%</b></td>
           <td class="title title--small py--0.5"><b>W {{ u_week }}%</b></td>
@@ -24,10 +24,10 @@
       {% endif %}
 
       <!-- Today -->
-      <table class="w--full mt--1" style="border-collapse:collapse;">
+      <table class="w--full mt--0.5" style="border-collapse:collapse;">
         <tr>
           <td class="title title--small">Today {% if trend == "up" %}&#8599;{% elsif trend == "down" %}&#8600;{% endif %}</td>
-          <td class="value text--right"><b>{{ t_total }}</b></td>
+          <td class="value value--xsmall text--right"><b>{{ t_total }}</b></td>
         </tr>
         <tr>
           <td class="title title--small" colspan="2">~{{ t_cost }} · {{ t_messages }} msgs</td>
@@ -35,21 +35,18 @@
       </table>
 
       <!-- Week -->
-      <table class="w--full mt--1" style="border-collapse:collapse;">
+      <table class="w--full mt--0.5" style="border-collapse:collapse;">
         <tr>
           <td class="title title--small">Week: <b>{{ w_tokens }}</b> · ~{{ w_cost }}</td>
         </tr>
       </table>
-      <table class="w--full mt--1" style="border-collapse:collapse;">
+      <table class="w--full mt--0.5" style="border-collapse:collapse;">
         <tr>
           <td class="title title--small" style="letter-spacing:2px;">{{ spark }}</td>
           <td class="title title--small text--right">{% if streak > 1 %}<b>{{ streak }}d</b>{% endif %}</td>
         </tr>
       </table>
 
-      {% if active > 0 %}
-      <div class="title title--small mt--1">● {{ active }} active</div>
-      {% endif %}
     </div>
 
     <div class="title_bar">
