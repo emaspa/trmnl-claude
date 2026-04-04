@@ -1,0 +1,132 @@
+<div class="screen">
+  <div class="view view--full">
+    <div class="layout layout--col layout--top">
+
+      <!-- ── Header ─────────────────────────────────── -->
+      <div style="display:flex; justify-content:space-between; align-items:baseline; width:100%; padding-bottom:6px;">
+        <span style="font-size:26px; font-weight:700; letter-spacing:2px;">CLAUDE CODE</span>
+        <div style="text-align:right;">
+          <span style="font-size:18px; font-weight:700;">{{ sub }}</span>
+          <span style="font-size:16px; opacity:.55; margin-left:4px;">{{ tier }}</span>
+          {% if active > 0 %}
+            <span style="display:inline-block; width:8px; height:8px; background:#000; border-radius:50%; margin:0 4px 0 14px; vertical-align:middle;"></span>
+            <span style="font-size:14px;">{{ active }} active</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- ── Body: two columns ──────────────────────── -->
+      <div style="display:flex; flex:1; gap:28px; width:100%; padding:10px 0 0;">
+
+        <!-- Left: Today -->
+        <div style="flex:1;">
+          <div style="font-size:13px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:10px;">
+            Today
+            {% if trend == "up" %} &#8599;{% elsif trend == "down" %} &#8600;{% elsif trend == "flat" %} &#8594;{% endif %}
+          </div>
+
+          <div style="display:grid; grid-template-columns:auto 1fr; gap:3px 14px; font-size:15px;">
+            <span style="opacity:.5;">Input</span>    <span style="font-weight:600;">{{ t_input }}</span>
+            <span style="opacity:.5;">Output</span>   <span style="font-weight:600;">{{ t_output }}</span>
+            <span style="opacity:.5;">Cache Read</span><span style="font-weight:600;">{{ t_cache_r }}</span>
+            <span style="opacity:.5;">Cache Write</span><span style="font-weight:600;">{{ t_cache_w }}</span>
+          </div>
+
+          <div style="border-top:1px solid #ccc; margin:10px 0;"></div>
+
+          <div style="display:grid; grid-template-columns:auto 1fr; gap:3px 14px; font-size:15px;">
+            <span style="opacity:.5;">Total</span>
+            <span style="font-weight:700; font-size:20px;">{{ t_total }}</span>
+            <span style="opacity:.5;">API equiv.</span>
+            <span style="font-weight:600;">~{{ t_cost }}</span>
+            <span style="opacity:.5;">Sessions</span>
+            <span style="font-weight:600;">{{ t_sessions }}</span>
+            <span style="opacity:.5;">Messages</span>
+            <span style="font-weight:600;">{{ t_messages }}</span>
+          </div>
+
+          {% if top_project != "—" %}
+          <div style="margin-top:12px; font-size:13px; opacity:.5;">
+            Top project: <span style="font-weight:600; opacity:1;">{{ top_project }}</span>
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- Right: Models + Week -->
+        <div style="flex:1;">
+          <div style="font-size:13px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:10px;">
+            Models (7d)
+          </div>
+
+          {% if m1_name != "" %}
+          <div style="margin-bottom:8px;">
+            <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:3px;">
+              <span style="font-weight:600;">{{ m1_name }}</span>
+              <span>{{ m1_tokens }} &middot; {{ m1_pct }}%</span>
+            </div>
+            <div style="height:10px; background:#ddd; width:100%;">
+              <div style="height:100%; background:#000; width:{{ m1_pct }}%;"></div>
+            </div>
+          </div>
+          {% endif %}
+
+          {% if m2_name != "" %}
+          <div style="margin-bottom:8px;">
+            <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:3px;">
+              <span style="font-weight:600;">{{ m2_name }}</span>
+              <span>{{ m2_tokens }} &middot; {{ m2_pct }}%</span>
+            </div>
+            <div style="height:10px; background:#ddd; width:100%;">
+              <div style="height:100%; background:#000; width:{{ m2_pct }}%;"></div>
+            </div>
+          </div>
+          {% endif %}
+
+          {% if m3_name != "" %}
+          <div style="margin-bottom:8px;">
+            <div style="display:flex; justify-content:space-between; font-size:14px; margin-bottom:3px;">
+              <span style="font-weight:600;">{{ m3_name }}</span>
+              <span>{{ m3_tokens }} &middot; {{ m3_pct }}%</span>
+            </div>
+            <div style="height:10px; background:#ddd; width:100%;">
+              <div style="height:100%; background:#000; width:{{ m3_pct }}%;"></div>
+            </div>
+          </div>
+          {% endif %}
+
+          <div style="border-top:1px solid #ccc; margin:12px 0;"></div>
+
+          <div style="font-size:13px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:8px;">
+            This Week
+          </div>
+
+          <div style="font-size:15px; line-height:1.7;">
+            <span style="font-weight:700;">{{ w_tokens }}</span> tokens
+            &middot; ~{{ w_cost }}<br>
+            {{ w_sessions }} sessions &middot; {{ w_messages }} msgs
+          </div>
+
+          <div style="margin-top:14px;">
+            <div style="font-size:11px; opacity:.45; margin-bottom:2px;">7-day activity</div>
+            <span style="font-size:30px; letter-spacing:3px; font-family:monospace;">{{ spark }}</span>
+          </div>
+
+          {% if streak > 1 %}
+          <div style="margin-top:8px; font-size:14px; font-weight:600;">
+            {{ streak }}-day streak
+          </div>
+          {% endif %}
+        </div>
+
+      </div>
+    </div>
+
+    <div class="title_bar">
+      <img class="image image--logo" src="https://usetrmnl.com/images/plugins/trmnl--render.svg" />
+      <span class="title">Claude Code</span>
+      <span class="instance">{{ updated }}</span>
+    </div>
+  </div>
+</div>

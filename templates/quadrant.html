@@ -1,0 +1,45 @@
+<div class="screen">
+  <div class="view view--quadrant">
+    <div class="layout layout--col layout--top">
+
+      <!-- Header -->
+      <div style="display:flex; justify-content:space-between; align-items:baseline; width:100%;">
+        <span style="font-size:14px; font-weight:700; letter-spacing:1px;">CLAUDE CODE</span>
+        <span style="font-size:11px; font-weight:600;">{{ sub }} {{ tier }}</span>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Today total -->
+      <div style="width:100%; padding:8px 0;">
+        <div style="font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; opacity:.6;">
+          Today {% if trend == "up" %}&#8599;{% elsif trend == "down" %}&#8600;{% endif %}
+        </div>
+        <div style="font-size:36px; font-weight:700; line-height:1.1;">{{ t_total }}</div>
+        <div style="font-size:12px; margin-top:2px;">
+          ~{{ t_cost }} &middot; {{ t_messages }} msgs
+        </div>
+      </div>
+
+      <!-- Week -->
+      <div style="width:100%;">
+        <div style="font-size:11px; opacity:.5; margin-bottom:2px;">Week: {{ w_tokens }} &middot; ~{{ w_cost }}</div>
+        <span style="font-size:20px; letter-spacing:2px; font-family:monospace;">{{ spark }}</span>
+      </div>
+
+      <!-- Active sessions indicator -->
+      {% if active > 0 %}
+      <div style="margin-top:auto; width:100%; font-size:11px; padding-top:4px;">
+        <span style="display:inline-block; width:5px; height:5px; background:#000; border-radius:50%; vertical-align:middle; margin-right:3px;"></span>
+        {{ active }} active
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="title_bar">
+      <img class="image image--logo" src="https://usetrmnl.com/images/plugins/trmnl--render.svg" />
+      <span class="title">Claude Code</span>
+      <span class="instance">{{ updated }}</span>
+    </div>
+  </div>
+</div>

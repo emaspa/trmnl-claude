@@ -1,0 +1,93 @@
+<div class="screen">
+  <div class="view view--half_horizontal">
+    <div class="layout layout--col layout--top">
+
+      <!-- Header -->
+      <div style="display:flex; justify-content:space-between; align-items:baseline; width:100%; padding-bottom:4px;">
+        <span style="font-size:20px; font-weight:700; letter-spacing:1.5px;">CLAUDE CODE</span>
+        <div>
+          <span style="font-size:15px; font-weight:600;">{{ sub }}</span>
+          <span style="font-size:13px; opacity:.5; margin-left:3px;">{{ tier }}</span>
+          {% if active > 0 %}
+            <span style="display:inline-block; width:6px; height:6px; background:#000; border-radius:50%; margin:0 3px 0 10px; vertical-align:middle;"></span>
+            <span style="font-size:12px;">{{ active }}</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Content row -->
+      <div style="display:flex; gap:20px; width:100%; padding-top:6px; flex:1;">
+
+        <!-- Today -->
+        <div style="flex:1;">
+          <div style="font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; margin-bottom:6px;">
+            Today {% if trend == "up" %}&#8599;{% elsif trend == "down" %}&#8600;{% endif %}
+          </div>
+          <div style="font-size:28px; font-weight:700;">{{ t_total }}</div>
+          <div style="font-size:13px; margin-top:2px;">
+            ~{{ t_cost }} &middot; {{ t_sessions }}s &middot; {{ t_messages }}m
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:1px 10px; font-size:12px; margin-top:6px; opacity:.7;">
+            <span>In {{ t_input }}</span>
+            <span>Out {{ t_output }}</span>
+            <span>C/R {{ t_cache_r }}</span>
+            <span>C/W {{ t_cache_w }}</span>
+          </div>
+        </div>
+
+        <!-- Models -->
+        <div style="flex:1;">
+          {% if m1_name != "" %}
+          <div style="margin-bottom:5px;">
+            <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:2px;">
+              <span style="font-weight:600;">{{ m1_name }}</span>
+              <span>{{ m1_pct }}%</span>
+            </div>
+            <div style="height:8px; background:#ddd;"><div style="height:100%; background:#000; width:{{ m1_pct }}%;"></div></div>
+          </div>
+          {% endif %}
+          {% if m2_name != "" %}
+          <div style="margin-bottom:5px;">
+            <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:2px;">
+              <span style="font-weight:600;">{{ m2_name }}</span>
+              <span>{{ m2_pct }}%</span>
+            </div>
+            <div style="height:8px; background:#ddd;"><div style="height:100%; background:#000; width:{{ m2_pct }}%;"></div></div>
+          </div>
+          {% endif %}
+          {% if m3_name != "" %}
+          <div>
+            <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:2px;">
+              <span style="font-weight:600;">{{ m3_name }}</span>
+              <span>{{ m3_pct }}%</span>
+            </div>
+            <div style="height:8px; background:#ddd;"><div style="height:100%; background:#000; width:{{ m3_pct }}%;"></div></div>
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- Week -->
+        <div style="flex:1; text-align:right;">
+          <div style="font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; margin-bottom:6px;">
+            Week
+          </div>
+          <div style="font-size:22px; font-weight:700;">{{ w_tokens }}</div>
+          <div style="font-size:13px;">~{{ w_cost }} &middot; {{ w_sessions }}s</div>
+          <div style="margin-top:8px; font-family:monospace; font-size:22px; letter-spacing:2px;">{{ spark }}</div>
+          {% if streak > 1 %}
+          <div style="font-size:12px; margin-top:4px;">{{ streak }}d streak</div>
+          {% endif %}
+        </div>
+
+      </div>
+    </div>
+
+    <div class="title_bar">
+      <img class="image image--logo" src="https://usetrmnl.com/images/plugins/trmnl--render.svg" />
+      <span class="title">Claude Code</span>
+      <span class="instance">{{ updated }}</span>
+    </div>
+  </div>
+</div>
