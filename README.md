@@ -136,4 +136,4 @@ Set `TRMNL_PLUGIN_UUID` as a system environment variable, or wrap the call in a 
 
 ## License
 
-MIT
+GPL-3.0 -- see [LICENSE](LICENSE)
