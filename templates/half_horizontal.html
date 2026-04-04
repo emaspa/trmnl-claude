@@ -1,93 +1,122 @@
 <div class="screen">
   <div class="view view--half_horizontal">
-    <div class="layout layout--col layout--top">
+    <div class="layout layout--col layout--top" style="padding:8px 20px;">
 
       <!-- Header -->
-      <div style="display:flex; justify-content:space-between; align-items:baseline; width:100%; padding-bottom:4px;">
-        <span style="font-size:20px; font-weight:700; letter-spacing:1.5px;">CLAUDE CODE</span>
-        <div>
-          <span style="font-size:15px; font-weight:600;">{{ sub }}</span>
-          <span style="font-size:13px; opacity:.5; margin-left:3px;">{{ tier }}</span>
+      <div style="display:flex; justify-content:space-between; align-items:baseline; width:100%; padding-bottom:2px;">
+        <span class="title" style="font-size:20px; letter-spacing:1.5px;">CLAUDE CODE</span>
+        <div style="text-align:right;">
+          <span class="title" style="font-size:16px;"><b>{{ sub }}</b></span>
+          <span class="title" style="font-size:14px; margin-left:3px;">{{ tier }}</span>
           {% if active > 0 %}
-            <span style="display:inline-block; width:6px; height:6px; background:#000; border-radius:50%; margin:0 3px 0 10px; vertical-align:middle;"></span>
-            <span style="font-size:12px;">{{ active }}</span>
+            <span style="display:inline-block; width:6px; height:6px; background:#000; border-radius:50%; margin:0 3px 0 8px; vertical-align:middle;"></span>
+            <span class="title" style="font-size:14px;">{{ active }}</span>
           {% endif %}
         </div>
       </div>
 
-      <div class="divider"></div>
+      {% if u_session != "—" %}
+      <table style="width:100%; border-collapse:collapse; margin-bottom:2px;">
+        <tr>
+          <td class="title" style="font-size:13px; padding:1px 0;"><b>Session {{ u_session }}%</b></td>
+          <td class="title" style="font-size:13px; padding:1px 0;"><b>Week {{ u_week }}%</b></td>
+          <td class="title" style="font-size:13px; padding:1px 0;"><b>Sonnet {{ u_sonnet }}%</b></td>
+        </tr>
+        <tr>
+          <td style="padding:1px 4px 1px 0;"><div style="height:5px; background:#ddd; width:100%;"><div style="height:100%; background:#000; width:{{ u_session }}%;"></div></div></td>
+          <td style="padding:1px 4px 1px 0;"><div style="height:5px; background:#ddd; width:100%;"><div style="height:100%; background:#000; width:{{ u_week }}%;"></div></div></td>
+          <td style="padding:1px 4px 1px 0;"><div style="height:5px; background:#ddd; width:100%;"><div style="height:100%; background:#000; width:{{ u_sonnet }}%;"></div></div></td>
+        </tr>
+      </table>
+      {% endif %}
 
-      <!-- Content row -->
-      <div style="display:flex; gap:20px; width:100%; padding-top:6px; flex:1;">
+      <!-- Content -->
+      <table style="width:100%; border-collapse:collapse; margin-top:2px;">
+        <tr>
+          <!-- Today -->
+          <td style="vertical-align:top; width:33%; padding-right:12px;">
+            <p class="title" style="font-size:14px; letter-spacing:1px; margin:0 0 4px 0; border-bottom:1px solid #000; padding-bottom:2px;">
+              <b>Today {% if trend == "up" %}&#8599;{% elsif trend == "down" %}&#8600;{% endif %}</b>
+            </p>
+            <table style="font-size:14px; border-collapse:collapse; width:100%;">
+              <tr>
+                <td class="title" style="padding:1px 0;">Total</td>
+                <td class="title" style="text-align:right; font-size:20px;"><b>{{ t_total }}</b></td>
+              </tr>
+              <tr>
+                <td class="title" style="padding:1px 0;">Cost</td>
+                <td class="title" style="text-align:right;"><b>~{{ t_cost }}</b></td>
+              </tr>
+              <tr>
+                <td class="title" style="padding:1px 0;" colspan="2">{{ t_sessions }}s &middot; {{ t_messages }}m</td>
+              </tr>
+            </table>
+          </td>
 
-        <!-- Today -->
-        <div style="flex:1;">
-          <div style="font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; margin-bottom:6px;">
-            Today {% if trend == "up" %}&#8599;{% elsif trend == "down" %}&#8600;{% endif %}
-          </div>
-          <div style="font-size:28px; font-weight:700;">{{ t_total }}</div>
-          <div style="font-size:13px; margin-top:2px;">
-            ~{{ t_cost }} &middot; {{ t_sessions }}s &middot; {{ t_messages }}m
-          </div>
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:1px 10px; font-size:12px; margin-top:6px; opacity:.7;">
-            <span>In {{ t_input }}</span>
-            <span>Out {{ t_output }}</span>
-            <span>C/R {{ t_cache_r }}</span>
-            <span>C/W {{ t_cache_w }}</span>
-          </div>
-        </div>
-
-        <!-- Models -->
-        <div style="flex:1;">
-          {% if m1_name != "" %}
-          <div style="margin-bottom:5px;">
-            <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:2px;">
-              <span style="font-weight:600;">{{ m1_name }}</span>
-              <span>{{ m1_pct }}%</span>
+          <!-- Models -->
+          <td style="vertical-align:top; width:34%; padding:0 12px; border-left:1px solid #ddd;">
+            {% if m1_name != "" %}
+            <div style="margin-bottom:4px;">
+              <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:2px;">
+                <span class="title"><b>{{ m1_name }}</b></span>
+                <span class="title">{{ m1_pct }}%</span>
+              </div>
+              <div style="height:6px; background:#ddd;"><div style="height:100%; background:#000; width:{{ m1_pct }}%;"></div></div>
             </div>
-            <div style="height:8px; background:#ddd;"><div style="height:100%; background:#000; width:{{ m1_pct }}%;"></div></div>
-          </div>
-          {% endif %}
-          {% if m2_name != "" %}
-          <div style="margin-bottom:5px;">
-            <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:2px;">
-              <span style="font-weight:600;">{{ m2_name }}</span>
-              <span>{{ m2_pct }}%</span>
+            {% endif %}
+            {% if m2_name != "" %}
+            <div style="margin-bottom:4px;">
+              <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:2px;">
+                <span class="title"><b>{{ m2_name }}</b></span>
+                <span class="title">{{ m2_pct }}%</span>
+              </div>
+              <div style="height:6px; background:#ddd;"><div style="height:100%; background:#000; width:{{ m2_pct }}%;"></div></div>
             </div>
-            <div style="height:8px; background:#ddd;"><div style="height:100%; background:#000; width:{{ m2_pct }}%;"></div></div>
-          </div>
-          {% endif %}
-          {% if m3_name != "" %}
-          <div>
-            <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:2px;">
-              <span style="font-weight:600;">{{ m3_name }}</span>
-              <span>{{ m3_pct }}%</span>
+            {% endif %}
+            {% if m3_name != "" %}
+            <div>
+              <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:2px;">
+                <span class="title"><b>{{ m3_name }}</b></span>
+                <span class="title">{{ m3_pct }}%</span>
+              </div>
+              <div style="height:6px; background:#ddd;"><div style="height:100%; background:#000; width:{{ m3_pct }}%;"></div></div>
             </div>
-            <div style="height:8px; background:#ddd;"><div style="height:100%; background:#000; width:{{ m3_pct }}%;"></div></div>
-          </div>
-          {% endif %}
-        </div>
+            {% endif %}
+          </td>
 
-        <!-- Week -->
-        <div style="flex:1; text-align:right;">
-          <div style="font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; margin-bottom:6px;">
-            Week
-          </div>
-          <div style="font-size:22px; font-weight:700;">{{ w_tokens }}</div>
-          <div style="font-size:13px;">~{{ w_cost }} &middot; {{ w_sessions }}s</div>
-          <div style="margin-top:8px; font-family:monospace; font-size:22px; letter-spacing:2px;">{{ spark }}</div>
-          {% if streak > 1 %}
-          <div style="font-size:12px; margin-top:4px;">{{ streak }}d streak</div>
-          {% endif %}
-        </div>
+          <!-- Week -->
+          <td style="vertical-align:top; width:33%; padding-left:12px; border-left:1px solid #ddd; text-align:right;">
+            <p class="title" style="font-size:14px; letter-spacing:1px; margin:0 0 4px 0; border-bottom:1px solid #000; padding-bottom:2px;">
+              <b>Week</b>
+            </p>
+            <table style="font-size:14px; border-collapse:collapse; width:100%;">
+              <tr>
+                <td class="title" style="text-align:right; font-size:18px;" colspan="2"><b>{{ w_tokens }}</b></td>
+              </tr>
+              <tr>
+                <td class="title" style="text-align:right;" colspan="2">~{{ w_cost }} &middot; {{ w_sessions }}s</td>
+              </tr>
+            </table>
+            <table style="font-size:14px; border-collapse:collapse; width:100%; margin-top:4px;">
+              <tr>
+                <td class="title" style="font-size:18px; letter-spacing:2px;">{{ spark }}</td>
+              </tr>
+              {% if streak > 1 %}
+              <tr>
+                <td class="title" style="text-align:right;"><b>{{ streak }}d streak</b></td>
+              </tr>
+              {% endif %}
+            </table>
+          </td>
+        </tr>
+      </table>
 
-      </div>
     </div>
 
     <div class="title_bar">
       <img class="image image--logo" src="https://usetrmnl.com/images/plugins/trmnl--render.svg" />
-      <span class="title">Claude Code</span>
-      <span class="instance">{{ updated }}</span>
+      <span class="title">Claude Code Dashboard</span>
+      <span class="instance">Updated on {{ updated }}</span>
     </div>
   </div>
 </div>
