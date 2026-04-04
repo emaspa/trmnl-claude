@@ -552,6 +552,32 @@ def _test_payload():
     }
 
 
+# ── Debounce ─────────────────────────────────────────────────────────
+
+def _debounce_path():
+    return _find_claude_dir() / ".trmnl_last_push"
+
+
+def _should_run(minutes):
+    """Return True if enough time has passed since last push."""
+    ts_file = _debounce_path()
+    if not ts_file.exists():
+        return True
+    try:
+        last = float(ts_file.read_text("utf-8").strip())
+        return (datetime.now(timezone.utc).timestamp() - last) >= minutes * 60
+    except Exception:
+        return True
+
+
+def _mark_pushed():
+    """Record the current time as last push."""
+    try:
+        _debounce_path().write_text(str(datetime.now(timezone.utc).timestamp()), encoding="utf-8")
+    except Exception:
+        pass
+
+
 # ── CLI ──────────────────────────────────────────────────────────────
 
 def main():
@@ -564,7 +590,12 @@ def main():
                         help="Use sample multi-model data for layout preview")
     parser.add_argument("--no-scrape", action="store_true",
                         help="Skip usage scraping (faster, no PTY needed)")
+    parser.add_argument("--debounce", type=int, metavar="MIN", default=0,
+                        help="Skip if last push was less than MIN minutes ago")
     args = parser.parse_args()
+
+    if args.debounce and not _should_run(args.debounce):
+        sys.exit(0)
 
     if args.test:
         payload = _test_payload()
@@ -575,6 +606,7 @@ def main():
         print(json.dumps(payload, indent=2, default=str))
     else:
         post_to_trmnl(payload)
+        _mark_pushed()
 
 
 if __name__ == "__main__":
