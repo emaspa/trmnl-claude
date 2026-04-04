@@ -267,9 +267,110 @@ def _streak(daily):
     return s
 
 
+# ── Usage scraper (PTY) ──────────────────────────────────────────────
+
+def _scrape_usage():
+    """Scrape /usage from Claude Code via PTY. Returns dict with session/week pct."""
+    import threading
+    try:
+        from winpty import PtyProcess
+    except ImportError:
+        try:
+            import pexpect
+        except ImportError:
+            return {}
+        return _scrape_usage_pexpect(pexpect)
+    return _scrape_usage_winpty(PtyProcess, threading)
+
+
+def _scrape_usage_winpty(PtyProcess, threading):
+    """Windows: use winpty."""
+    proc = PtyProcess.spawn('claude', dimensions=(45, 180))
+    output = []
+
+    def reader():
+        while proc.isalive():
+            try:
+                chunk = proc.read(4096)
+                if chunk:
+                    output.append(chunk)
+            except EOFError:
+                break
+            except Exception:
+                import time; time.sleep(0.2)
+
+    t = threading.Thread(target=reader, daemon=True)
+    t.start()
+    import time
+    time.sleep(6)
+
+    if not proc.isalive():
+        return {}
+
+    proc.write('/usage\r')
+    time.sleep(8)
+    proc.write('\x1b')
+    time.sleep(1)
+    proc.write('/exit\r')
+    time.sleep(2)
+    try:
+        proc.close(force=True)
+    except Exception:
+        pass
+    t.join(timeout=2)
+    return _parse_usage_output("".join(output))
+
+
+def _scrape_usage_pexpect(pexpect):
+    """macOS/Linux: use pexpect."""
+    import time
+    proc = pexpect.spawn('claude', dimensions=(45, 180), encoding='utf-8', timeout=30)
+    try:
+        proc.expect([r'[>❯]', r'\u2570'], timeout=10)
+    except Exception:
+        pass
+    time.sleep(2)
+    proc.sendline('/usage')
+    time.sleep(8)
+    proc.send('\x1b')
+    time.sleep(1)
+    proc.sendline('/exit')
+    time.sleep(1)
+    raw = proc.before or ""
+    proc.close()
+    return _parse_usage_output(raw)
+
+
+def _parse_usage_output(raw):
+    """Parse /usage TUI output into dict."""
+    import re
+    clean = re.sub(
+        r'\x1b\[[0-9;]*[a-zA-Z]|\x1b\[\?[0-9;]*[a-zA-Z]'
+        r'|\x1b\].*?(?:\x07|\x1b\\)|\x1b[()][AB012]|\x1b[>=<]',
+        '', raw
+    )
+    result = {}
+    for key, pattern in {
+        "session": r"(?i)current\s+session",
+        "week_all": r"(?i)(?:current\s+)?week\s*[\(:]?\s*all\s+models",
+        "week_sonnet": r"(?i)(?:current\s+)?week\s*[\(:]?\s*sonnet",
+    }.items():
+        m = re.search(pattern, clean)
+        if not m:
+            continue
+        block = clean[m.start():m.start() + 400]
+        pct = re.search(r'(\d+)\s*%', block)
+        reset = re.search(r'[Rr]esets?\s+(.+?)(?:\r|\n|$)', block)
+        result[key] = {
+            "pct": int(pct.group(1)) if pct else None,
+            "resets": reset.group(1).strip() if reset else None,
+        }
+    return result
+
+
 # ── Build TRMNL payload ─────────────────────────────────────────────
 
-def build_payload():
+def build_payload(scrape=True):
     cd = _find_claude_dir()
     now = datetime.now(timezone.utc)
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -278,6 +379,7 @@ def build_payload():
     sub_type, tier = _read_credentials(cd)
     active = _count_active_sessions(cd)
     daily, models, projects = _scan_usage(cd, since=seven_ago)
+    usage_limits = _scrape_usage() if scrape else {}
 
     # Today
     today_key = now.strftime("%Y-%m-%d")
@@ -318,11 +420,12 @@ def build_payload():
     models_sorted = sorted(models.items(), key=lambda x: x[1]["tokens"], reverse=True)
     total_model_tokens = sum(m["tokens"] for _, m in models_sorted)
 
-    # Date format (Windows vs Unix)
+    # Date format in local time (Windows vs Unix)
+    local_now = datetime.now()
     try:
-        updated = now.strftime("%b %-d, %H:%M")
+        updated = local_now.strftime("%b %-d, %H:%M")
     except ValueError:
-        updated = now.strftime("%b %#d, %H:%M")
+        updated = local_now.strftime("%b %#d, %H:%M")
 
     mv = {
         "sub": sub_type,
@@ -348,6 +451,11 @@ def build_payload():
         "streak": _streak(daily),
         # Top project
         "top_project": max(projects, key=lambda k: projects[k]["tokens"]) if projects else "—",
+        # Usage limits
+        "u_session": usage_limits.get("session", {}).get("pct", "—"),
+        "u_week": usage_limits.get("week_all", {}).get("pct", "—"),
+        "u_sonnet": usage_limits.get("week_sonnet", {}).get("pct", "—"),
+        "u_reset": usage_limits.get("session", {}).get("resets", ""),
         # Timestamp
         "updated": updated,
     }
@@ -374,26 +482,74 @@ def build_payload():
 # ── TRMNL webhook ────────────────────────────────────────────────────
 
 def post_to_trmnl(merge_variables):
+    import subprocess
     uuid = os.environ.get("TRMNL_PLUGIN_UUID")
     if not uuid:
         print("Error: TRMNL_PLUGIN_UUID environment variable not set", file=sys.stderr)
         sys.exit(1)
 
     url = f"https://usetrmnl.com/api/custom_plugins/{uuid}"
-    data = json.dumps({"merge_variables": merge_variables}).encode("utf-8")
+    payload = json.dumps({"merge_variables": merge_variables})
 
-    req = urllib.request.Request(url, data=data,
-                                headers={"Content-Type": "application/json"},
-                                method="POST")
-    try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            print(f"OK ({resp.status}): {resp.read().decode('utf-8')}")
-    except urllib.error.HTTPError as e:
-        print(f"HTTP {e.code}: {e.read().decode()}", file=sys.stderr)
+    r = subprocess.run(
+        ["curl", "-s", "-w", "\n%{http_code}", "-X", "POST",
+         "-H", "Content-Type: application/json",
+         "-d", payload, url],
+        capture_output=True, timeout=30,
+    )
+    stdout = r.stdout.decode("utf-8", errors="replace").strip()
+    lines = stdout.rsplit("\n", 1)
+    body = lines[0] if len(lines) > 1 else ""
+    code = lines[-1]
+    if code.startswith("2"):
+        print(f"OK ({code}): {body}")
+    else:
+        print(f"HTTP {code}: {body}", file=sys.stderr)
         sys.exit(1)
-    except urllib.error.URLError as e:
-        print(f"Connection error: {e.reason}", file=sys.stderr)
-        sys.exit(1)
+
+
+# ── Test data ────────────────────────────────────────────────────────
+
+def _test_payload():
+    """Sample payload with multi-model data for previewing the layout."""
+    return {
+        "sub": "Max",
+        "tier": "20x",
+        "active": 2,
+        "t_input": "1.2M",
+        "t_output": "245K",
+        "t_cache_r": "3.4M",
+        "t_cache_w": "890K",
+        "t_total": "5.7M",
+        "t_cost": "$18.50",
+        "t_sessions": 4,
+        "t_messages": 142,
+        "trend": "up",
+        "w_tokens": "28.3M",
+        "w_cost": "$67.89",
+        "w_sessions": 12,
+        "w_messages": 847,
+        "spark": "\u2581\u2583\u2585\u2587\u2584\u2586\u2588\u2585",
+        "streak": 7,
+        "top_project": "trmnl-claude",
+        "updated": "Apr 4, 11:22",
+        "m1_name": "Opus",
+        "m1_tokens": "18.2M",
+        "m1_pct": 64,
+        "m1_cost": "$312",
+        "m2_name": "Sonnet",
+        "m2_tokens": "8.1M",
+        "m2_pct": 29,
+        "m2_cost": "$24.30",
+        "m3_name": "Haiku",
+        "m3_tokens": "2.0M",
+        "m3_pct": 7,
+        "m3_cost": "$1.60",
+        "u_session": 42,
+        "u_week": 18,
+        "u_sonnet": 5,
+        "u_reset": "in 3h",
+    }
 
 
 # ── CLI ──────────────────────────────────────────────────────────────
@@ -404,9 +560,16 @@ def main():
         description="Claude Code usage dashboard for TRMNL e-ink displays")
     parser.add_argument("--dry-run", action="store_true",
                         help="Print payload JSON without posting to TRMNL")
+    parser.add_argument("--test", action="store_true",
+                        help="Use sample multi-model data for layout preview")
+    parser.add_argument("--no-scrape", action="store_true",
+                        help="Skip usage scraping (faster, no PTY needed)")
     args = parser.parse_args()
 
-    payload = build_payload()
+    if args.test:
+        payload = _test_payload()
+    else:
+        payload = build_payload(scrape=not args.no_scrape)
 
     if args.dry_run:
         print(json.dumps(payload, indent=2, default=str))

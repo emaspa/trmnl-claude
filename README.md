@@ -2,15 +2,14 @@
 
 Advanced Claude Code usage dashboard for [TRMNL](https://usetrmnl.com) e-ink displays.
 
-Reads your local Claude Code session data directly -- no screen scraping, no API keys, zero dependencies beyond Python stdlib.
-
-![full view](https://img.shields.io/badge/view-full%20%7C%20half%20%7C%20quadrant-black)
+Reads local Claude Code session data and optionally scrapes live usage limits via PTY. Cross-platform (Windows, macOS, Linux). Only stdlib + optional `pywinpty` (Windows) or `pexpect` (Unix).
 
 ## What it shows
 
 | Metric | Description |
 |--------|-------------|
 | **Subscription** | Plan type (Pro/Max) and rate limit tier (5x/20x) |
+| **Usage limits** | Session %, weekly %, Sonnet % with progress bars and reset time |
 | **Active sessions** | Currently running Claude Code instances |
 | **Today's tokens** | Input, output, cache read, cache write breakdown |
 | **API-equivalent cost** | What today's usage would cost at API prices |
@@ -26,19 +25,21 @@ Reads your local Claude Code session data directly -- no screen scraping, no API
 
 ```
 ~/.claude/
-  .credentials.json  -->  subscription type + tier
-  sessions/*.json    -->  active session count
-  projects/**/*.jsonl -->  token usage per message
-                              |
-                     claude_trmnl.py
-                              |
-                     POST merge_variables
-                              |
-                     usetrmnl.com/api/custom_plugins/{UUID}
-                              |
-                     TRMNL renders Liquid template to PNG
-                              |
-                     e-ink display pulls image on next wake
+  .credentials.json   -->  subscription type + tier
+  sessions/*.json     -->  active session count
+  projects/**/*.jsonl  -->  token usage per message
+
+claude CLI (via PTY)  -->  session/weekly usage % + reset times
+        |
+   claude_trmnl.py
+        |
+   POST merge_variables
+        |
+   trmnl.com/api/custom_plugins/{UUID}
+        |
+   TRMNL renders Liquid template to PNG
+        |
+   e-ink display pulls image on next wake
 ```
 
 ## Setup
@@ -46,40 +47,62 @@ Reads your local Claude Code session data directly -- no screen scraping, no API
 ### 1. Create the TRMNL plugin
 
 1. Go to your [TRMNL dashboard](https://usetrmnl.com) > **Plugins** > **Private Plugin**
-2. Name it "Claude Code"
+2. Name it "Claude Code Dashboard"
 3. Set strategy to **Webhook**
 4. Copy the **Plugin UUID** from the settings
-5. Paste one of the templates from `templates/` into the markup editor:
-   - `full.html` -- full screen (800x480)
-   - `half_horizontal.html` -- top/bottom half (800x240)
-   - `half_vertical.html` -- left/right half (400x480)
-   - `quadrant.html` -- quarter screen (400x240)
+5. Paste the template from `templates/full.html` into the markup editor
 
-### 2. Configure
+Other template sizes available: `half_horizontal.html`, `half_vertical.html`, `quadrant.html`
+
+### 2. Install dependencies (optional)
+
+For live usage limit scraping:
+
+```bash
+# Windows
+pip install pywinpty
+
+# macOS/Linux
+pip install pexpect
+```
+
+Without these, the dashboard still works -- it just won't show the session/weekly usage percentages. Use `--no-scrape` to skip.
+
+### 3. Configure
 
 ```bash
 cp .env.example .env
 # Edit .env and set your TRMNL_PLUGIN_UUID
 ```
 
-### 3. Run
+### 4. Run
 
 ```bash
 # Test locally (prints JSON, does not post)
 python claude_trmnl.py --dry-run
 
-# Post to TRMNL
-source .env  # or: export TRMNL_PLUGIN_UUID=...
+# Post to TRMNL (with usage scraping)
+python claude_trmnl.py
+
+# Post without scraping (faster, ~1 sec)
+python claude_trmnl.py --no-scrape
+
+# Preview with sample multi-model data
+python claude_trmnl.py --test
+```
+
+On Windows, set `TRMNL_PLUGIN_UUID` as an environment variable or use:
+```powershell
+$env:TRMNL_PLUGIN_UUID = "your-uuid"
 python claude_trmnl.py
 ```
 
-### 4. Schedule
+### 5. Schedule
 
 Run every 5-10 minutes to keep your display updated.
 
 **Linux/macOS (cron):**
 ```bash
-# crontab -e
 */5 * * * * cd /path/to/claude-trmnl && source .env && python claude_trmnl.py
 ```
 
@@ -105,7 +128,6 @@ Run every 5-10 minutes to keep your display updated.
 
 **Windows (Task Scheduler):**
 ```powershell
-# Run every 5 minutes
 $action = New-ScheduledTaskAction -Execute "python" `
   -Argument "claude_trmnl.py" `
   -WorkingDirectory "C:\path\to\claude-trmnl"
@@ -116,16 +138,15 @@ Register-ScheduledTask -TaskName "claude-trmnl" `
   -Action $action -Trigger $trigger -Settings $settings
 ```
 
-Set `TRMNL_PLUGIN_UUID` as a system environment variable, or wrap the call in a script that loads `.env`.
-
 ## Comparison with claude-usage-trmnl
 
 | Feature | [claude-usage-trmnl](https://github.com/carledwards/claude-usage-trmnl) | claude-trmnl |
 |---------|------|---|
-| Data source | Screen-scrapes `/usage` TUI via pexpect | Reads local JSONL files directly |
-| Dependencies | pexpect, pyte | None (stdlib only) |
+| Data source | Screen-scrapes `/usage` via pexpect | Local files + optional PTY scrape |
+| Dependencies | pexpect, pyte | Optional pywinpty or pexpect |
 | Platform | macOS only | Windows, macOS, Linux |
 | Metrics | 3 percentage bars | 15+ metrics |
+| Usage limits | Session/week/sonnet % | Session/week/sonnet % with reset times |
 | Token breakdown | No | Input/output/cache read/cache write |
 | Cost tracking | No | API-equivalent cost |
 | Model breakdown | No | Per-model % with progress bars |
