@@ -3,17 +3,12 @@
     <div class="layout layout--col layout--top" style="padding:12px 28px;">
 
       <!-- Header -->
-      <div class="flex flex--between flex--bottom w--full pb--xsmall">
-        <span class="title" style="font-size:28px; letter-spacing:2px;">CLAUDE CODE</span>
-        <div class="text--right">
-          <span class="title" style="font-size:20px;"><b>{{ sub }}</b></span>
-          <span class="title ml--xsmall" style="font-size:16px;">{{ tier }}</span>
-          {% if active > 0 %}
-            <span style="display:inline-block; width:8px; height:8px; background:#000; border-radius:50%; margin:0 4px 0 10px; vertical-align:middle;"></span>
-            <span class="title" style="font-size:16px;">{{ active }} active</span>
-          {% endif %}
-        </div>
-      </div>
+      <table class="w--full mb--xsmall" style="border-collapse:collapse;">
+        <tr>
+          <td class="title" style="font-size:28px; letter-spacing:2px;">CLAUDE CODE</td>
+          <td class="title text--right" style="font-size:20px;"><b>{{ sub }}</b> <span style="font-size:16px;">{{ tier }}</span>{% if active > 0 %} <span style="font-size:16px;">● {{ active }} active</span>{% endif %}</td>
+        </tr>
+      </table>
 
       <!-- Usage limits -->
       {% if u_session != "—" %}
@@ -25,16 +20,16 @@
           <td class="title text--right" style="font-size:16px; padding:2px 0;"><b>{{ u_reset }}</b></td>
         </tr>
         <tr>
-          <td style="padding:2px 6px 2px 0;"><div class="progress-bar progress-bar--xsmall"><div class="track"><div class="fill" style="width:{{ u_session }}%"></div></div></div></td>
-          <td style="padding:2px 6px 2px 0;"><div class="progress-bar progress-bar--xsmall"><div class="track"><div class="fill" style="width:{{ u_week }}%"></div></div></div></td>
-          <td style="padding:2px 6px 2px 0;"><div class="progress-bar progress-bar--xsmall"><div class="track"><div class="fill" style="width:{{ u_sonnet }}%"></div></div></div></td>
+          <td style="padding:2px 6px 2px 0;"><div class="progress-bar progress-bar--small"><div class="track"><div class="fill" style="width:{{ u_session }}%"></div></div></div></td>
+          <td style="padding:2px 6px 2px 0;"><div class="progress-bar progress-bar--small"><div class="track"><div class="fill" style="width:{{ u_week }}%"></div></div></div></td>
+          <td style="padding:2px 6px 2px 0;"><div class="progress-bar progress-bar--small"><div class="track"><div class="fill" style="width:{{ u_sonnet }}%"></div></div></div></td>
           <td></td>
         </tr>
       </table>
       {% endif %}
 
       <!-- Body -->
-      <table class="w--full mt--xsmall" style="border-collapse:collapse;">
+      <table class="w--full" style="border-collapse:collapse; margin-top:16px;">
         <tr>
           <td style="vertical-align:top; width:46%; padding-right:20px;">
 
@@ -91,7 +86,7 @@
                 <span class="title"><b>{{ m1_name }}</b></span>
                 <span class="title">{{ m1_tokens }} &middot; {{ m1_pct }}%</span>
               </div>
-              <div class="progress-bar progress-bar--xsmall"><div class="track"><div class="fill" style="width:{{ m1_pct }}%"></div></div></div>
+              <div class="progress-bar progress-bar--small"><div class="track"><div class="fill" style="width:{{ m1_pct }}%"></div></div></div>
             </div>
             {% endif %}
 
@@ -101,7 +96,7 @@
                 <span class="title"><b>{{ m2_name }}</b></span>
                 <span class="title">{{ m2_tokens }} &middot; {{ m2_pct }}%</span>
               </div>
-              <div class="progress-bar progress-bar--xsmall"><div class="track"><div class="fill" style="width:{{ m2_pct }}%"></div></div></div>
+              <div class="progress-bar progress-bar--small"><div class="track"><div class="fill" style="width:{{ m2_pct }}%"></div></div></div>
             </div>
             {% endif %}
 
@@ -111,11 +106,11 @@
                 <span class="title"><b>{{ m3_name }}</b></span>
                 <span class="title">{{ m3_tokens }} &middot; {{ m3_pct }}%</span>
               </div>
-              <div class="progress-bar progress-bar--xsmall"><div class="track"><div class="fill" style="width:{{ m3_pct }}%"></div></div></div>
+              <div class="progress-bar progress-bar--small"><div class="track"><div class="fill" style="width:{{ m3_pct }}%"></div></div></div>
             </div>
             {% endif %}
 
-            <p class="title mt--small mb--small" style="font-size:20px; letter-spacing:1.5px; border-bottom:1px solid #000; padding-bottom:3px;">
+            <p class="title mb--small" style="font-size:20px; letter-spacing:1.5px; border-bottom:1px solid #000; padding-bottom:3px; margin-top:16px;">
               <b>This Week</b>
             </p>
 
