@@ -167,6 +167,51 @@ Register-ScheduledTask -TaskName "claude-trmnl" `
 </plist>
 ```
 
+### 6. Live updates with Claude Code hooks (optional)
+
+You can have Claude Code automatically push dashboard updates while you're actively using it. Add a `Notification` hook to `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cmd /c start /min /b py C:\\path\\to\\claude-trmnl\\claude_trmnl.py --debounce 5"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+On macOS/Linux:
+```json
+{
+  "hooks": {
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python /path/to/claude-trmnl/claude_trmnl.py --debounce 5 &"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+The `--debounce 5` flag ensures it only pushes once every 5 minutes (respecting TRMNL's 12/hour rate limit). The command runs in the background so it doesn't slow down your responses.
+
+Restart Claude Code after editing `settings.json` for the hook to take effect.
+
 ## License
 
 GPL-3.0 -- see [LICENSE](LICENSE)
