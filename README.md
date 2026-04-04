@@ -2,6 +2,8 @@
 
 Advanced Claude Code usage dashboard for [TRMNL](https://usetrmnl.com) e-ink displays.
 
+![Claude Code Dashboard on TRMNL](screenshot.jpeg)
+
 Reads local Claude Code session data and optionally scrapes live usage limits via PTY. Cross-platform (Windows, macOS, Linux). Only stdlib + optional `pywinpty` (Windows) or `pexpect` (Unix).
 
 ## What it shows

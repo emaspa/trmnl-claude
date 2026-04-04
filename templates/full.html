@@ -18,15 +18,15 @@
       {% if u_session != "—" %}
       <table style="width:100%; border-collapse:collapse; margin-bottom:2px;">
         <tr>
-          <td class="title" style="font-size:14px; padding:2px 0;">Session <b>{{ u_session }}%</b></td>
-          <td class="title" style="font-size:14px; padding:2px 0;">Week <b>{{ u_week }}%</b></td>
-          <td class="title" style="font-size:14px; padding:2px 0;">Sonnet <b>{{ u_sonnet }}%</b></td>
-          <td class="title" style="font-size:12px; padding:2px 0; text-align:right;">{{ u_reset }}</td>
+          <td class="title" style="font-size:16px; padding:2px 0;">Session <b>{{ u_session }}%</b></td>
+          <td class="title" style="font-size:16px; padding:2px 0;">Week <b>{{ u_week }}%</b></td>
+          <td class="title" style="font-size:16px; padding:2px 0;">Sonnet <b>{{ u_sonnet }}%</b></td>
+          <td class="title" style="font-size:14px; padding:2px 0; text-align:right;">{{ u_reset }}</td>
         </tr>
         <tr>
-          <td style="padding:1px 4px 1px 0;"><div style="height:6px; background:#ddd; width:100%;"><div style="height:100%; background:#000; width:{{ u_session }}%;"></div></div></td>
-          <td style="padding:1px 4px 1px 0;"><div style="height:6px; background:#ddd; width:100%;"><div style="height:100%; background:#000; width:{{ u_week }}%;"></div></div></td>
-          <td style="padding:1px 4px 1px 0;"><div style="height:6px; background:#ddd; width:100%;"><div style="height:100%; background:#000; width:{{ u_sonnet }}%;"></div></div></td>
+          <td style="padding:2px 6px 2px 0;"><div style="height:8px; background:#ddd; width:100%;"><div style="height:100%; background:#000; width:{{ u_session }}%;"></div></div></td>
+          <td style="padding:2px 6px 2px 0;"><div style="height:8px; background:#ddd; width:100%;"><div style="height:100%; background:#000; width:{{ u_week }}%;"></div></div></td>
+          <td style="padding:2px 6px 2px 0;"><div style="height:8px; background:#ddd; width:100%;"><div style="height:100%; background:#000; width:{{ u_sonnet }}%;"></div></div></td>
           <td></td>
         </tr>
       </table>
@@ -46,40 +46,36 @@
             <table style="font-size:16px; border-collapse:collapse; width:100%;">
               <tr>
                 <td class="title" style="padding:2px 16px 2px 0;">Input</td>
-                <td class="title"><b>{{ t_input }}</b></td>
+                <td class="title" style="text-align:right;"><b>{{ t_input }}</b></td>
               </tr>
               <tr>
                 <td class="title" style="padding:2px 16px 2px 0;">Output</td>
-                <td class="title"><b>{{ t_output }}</b></td>
+                <td class="title" style="text-align:right;"><b>{{ t_output }}</b></td>
               </tr>
               <tr>
                 <td class="title" style="padding:2px 16px 2px 0;">Cache Read</td>
-                <td class="title"><b>{{ t_cache_r }}</b></td>
+                <td class="title" style="text-align:right;"><b>{{ t_cache_r }}</b></td>
               </tr>
               <tr>
                 <td class="title" style="padding:2px 16px 2px 0;">Cache Write</td>
-                <td class="title"><b>{{ t_cache_w }}</b></td>
+                <td class="title" style="text-align:right;"><b>{{ t_cache_w }}</b></td>
               </tr>
-            </table>
-
-            <div class="divider" style="margin:6px 0;"></div>
-
-            <table style="font-size:16px; border-collapse:collapse; width:100%;">
+              <tr><td colspan="2" style="padding:6px 0;"><div class="divider"></div></td></tr>
               <tr>
                 <td class="title" style="padding:2px 16px 2px 0;">Total</td>
-                <td class="title" style="font-size:26px;"><b>{{ t_total }}</b></td>
+                <td class="title" style="text-align:right; font-size:26px;"><b>{{ t_total }}</b></td>
               </tr>
               <tr>
                 <td class="title" style="padding:2px 16px 2px 0;">API equiv.</td>
-                <td class="title"><b>~{{ t_cost }}</b></td>
+                <td class="title" style="text-align:right;"><b>~{{ t_cost }}</b></td>
               </tr>
               <tr>
                 <td class="title" style="padding:2px 16px 2px 0;">Sessions</td>
-                <td class="title"><b>{{ t_sessions }}</b></td>
+                <td class="title" style="text-align:right;"><b>{{ t_sessions }}</b></td>
               </tr>
               <tr>
                 <td class="title" style="padding:2px 16px 2px 0;">Messages</td>
-                <td class="title"><b>{{ t_messages }}</b></td>
+                <td class="title" style="text-align:right;"><b>{{ t_messages }}</b></td>
               </tr>
             </table>
 
@@ -146,11 +142,6 @@
                 <td class="title" style="padding:2px 0; font-size:24px; letter-spacing:2px;">{{ spark }}</td>
                 <td class="title" style="padding:2px 0; text-align:right;">
                   {% if streak > 1 %}<b>{{ streak }}d streak</b>{% endif %}
-                </td>
-              </tr>
-              <tr>
-                <td class="title" style="padding:2px 0;" colspan="2">
-                  {% if top_project != "—" %}Top project: <b>{{ top_project }}</b>{% endif %}
                 </td>
               </tr>
             </table>
