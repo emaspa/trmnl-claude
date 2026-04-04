@@ -72,9 +72,28 @@ Without these, the dashboard still works -- it just won't show the session/weekl
 
 ### 3. Configure
 
+Set your Plugin UUID. Pick **one** of these approaches:
+
+**Option A: Environment variable (recommended)**
+
+Set `TRMNL_PLUGIN_UUID` as a system environment variable:
+- **Windows**: Settings > System > About > Advanced system settings > Environment Variables > New
+- **macOS/Linux**: add `export TRMNL_PLUGIN_UUID="your-uuid"` to `~/.bashrc` or `~/.zshrc`
+
+**Option B: Wrapper script**
+
+Create a `run.bat` (Windows) or `run.sh` (macOS/Linux) in the project folder:
+
+```bat
+@rem run.bat (Windows)
+set TRMNL_PLUGIN_UUID=your-uuid-here
+py claude_trmnl.py --no-scrape
+```
+
 ```bash
-cp .env.example .env
-# Edit .env and set your TRMNL_PLUGIN_UUID
+# run.sh (macOS/Linux)
+export TRMNL_PLUGIN_UUID="your-uuid-here"
+python claude_trmnl.py
 ```
 
 ### 4. Run
@@ -83,29 +102,49 @@ cp .env.example .env
 # Test locally (prints JSON, does not post)
 python claude_trmnl.py --dry-run
 
-# Post to TRMNL (with usage scraping)
+# Post to TRMNL (with usage limit scraping, ~20 sec)
 python claude_trmnl.py
 
-# Post without scraping (faster, ~1 sec)
+# Post without scraping (faster, ~1 sec, skips usage %)
 python claude_trmnl.py --no-scrape
 
 # Preview with sample multi-model data
 python claude_trmnl.py --test
 ```
 
-On Windows, set `TRMNL_PLUGIN_UUID` as an environment variable or use:
-```powershell
-$env:TRMNL_PLUGIN_UUID = "your-uuid"
-python claude_trmnl.py
-```
-
 ### 5. Schedule
 
 Run every 5-10 minutes to keep your display updated.
 
+**Windows (Task Scheduler):**
+
+If using a wrapper script:
+```powershell
+$action = New-ScheduledTaskAction -Execute "C:\path\to\claude-trmnl\run.bat" `
+  -WorkingDirectory "C:\path\to\claude-trmnl"
+$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
+  -RepetitionInterval (New-TimeSpan -Minutes 5)
+$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries
+Register-ScheduledTask -TaskName "claude-trmnl" `
+  -Action $action -Trigger $trigger -Settings $settings
+```
+
+If using a system environment variable:
+```powershell
+$action = New-ScheduledTaskAction -Execute "python" `
+  -Argument "claude_trmnl.py" `
+  -WorkingDirectory "C:\path\to\claude-trmnl"
+$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
+  -RepetitionInterval (New-TimeSpan -Minutes 5)
+$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries
+Register-ScheduledTask -TaskName "claude-trmnl" `
+  -Action $action -Trigger $trigger -Settings $settings
+```
+
 **Linux/macOS (cron):**
 ```bash
-*/5 * * * * cd /path/to/claude-trmnl && source .env && python claude_trmnl.py
+# crontab -e
+*/5 * * * * cd /path/to/claude-trmnl && ./run.sh
 ```
 
 **macOS (launchd):**
@@ -120,24 +159,12 @@ Run every 5-10 minutes to keep your display updated.
   <array>
     <string>/bin/bash</string>
     <string>-c</string>
-    <string>cd /path/to/claude-trmnl &amp;&amp; source .env &amp;&amp; python claude_trmnl.py</string>
+    <string>cd /path/to/claude-trmnl &amp;&amp; ./run.sh</string>
   </array>
   <key>StartInterval</key><integer>300</integer>
   <key>RunAtLoad</key><true/>
 </dict>
 </plist>
-```
-
-**Windows (Task Scheduler):**
-```powershell
-$action = New-ScheduledTaskAction -Execute "python" `
-  -Argument "claude_trmnl.py" `
-  -WorkingDirectory "C:\path\to\claude-trmnl"
-$trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) `
-  -RepetitionInterval (New-TimeSpan -Minutes 5)
-$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries
-Register-ScheduledTask -TaskName "claude-trmnl" `
-  -Action $action -Trigger $trigger -Settings $settings
 ```
 
 ## License
