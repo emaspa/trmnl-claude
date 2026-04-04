@@ -5,44 +5,31 @@
       <!-- Header -->
       <div class="flex flex--between flex--bottom w--full">
         <span class="title">CLAUDE CODE</span>
-        <div class="flex gap--xsmall flex--bottom">
-          <span class="label"><b>{{ sub }}</b></span>
-          <span class="label">{{ tier }}</span>
-        </div>
+        <span class="label"><b>{{ sub }}</b> {{ tier }}</span>
       </div>
 
       {% if u_session != "—" %}
-      <div class="grid grid--cols-3 gap--small w--full mt--xsmall">
-        <div>
-          <span class="label label--small"><b>Sess {{ u_session }}%</b></span>
-          <div class="progress-bar progress-bar--xsmall mt--xsmall">
-            <div class="track"><div class="fill" style="width:{{ u_session }}%"></div></div>
-          </div>
-        </div>
-        <div>
-          <span class="label label--small"><b>Week {{ u_week }}%</b></span>
-          <div class="progress-bar progress-bar--xsmall mt--xsmall">
-            <div class="track"><div class="fill" style="width:{{ u_week }}%"></div></div>
-          </div>
-        </div>
-        <div>
-          <span class="label label--small"><b>Son {{ u_sonnet }}%</b></span>
-          <div class="progress-bar progress-bar--xsmall mt--xsmall">
-            <div class="track"><div class="fill" style="width:{{ u_sonnet }}%"></div></div>
-          </div>
-        </div>
-      </div>
+      <table class="table table--xsmall w--full mt--xsmall">
+        <tr>
+          <td><span class="label label--small"><b>Sess {{ u_session }}%</b></span></td>
+          <td><span class="label label--small"><b>Week {{ u_week }}%</b></span></td>
+          <td><span class="label label--small"><b>Son {{ u_sonnet }}%</b></span></td>
+        </tr>
+        <tr>
+          <td><div class="progress-bar progress-bar--xsmall"><div class="track"><div class="fill" style="width:{{ u_session }}%"></div></div></div></td>
+          <td><div class="progress-bar progress-bar--xsmall"><div class="track"><div class="fill" style="width:{{ u_week }}%"></div></div></div></td>
+          <td><div class="progress-bar progress-bar--xsmall"><div class="track"><div class="fill" style="width:{{ u_sonnet }}%"></div></div></div></td>
+        </tr>
+      </table>
       {% endif %}
 
       <!-- Today -->
       <div class="label label--underline mt--small mb--xsmall"><b>Today {% if trend == "up" %}&#8599;{% elsif trend == "down" %}&#8600;{% endif %}</b></div>
 
-      <div class="grid grid--cols-2 gap--small">
-        <div class="flex flex--between"><span class="label">Input</span><span class="title"><b>{{ t_input }}</b></span></div>
-        <div class="flex flex--between"><span class="label">Output</span><span class="title"><b>{{ t_output }}</b></span></div>
-        <div class="flex flex--between"><span class="label">C/Read</span><span class="title"><b>{{ t_cache_r }}</b></span></div>
-        <div class="flex flex--between"><span class="label">C/Write</span><span class="title"><b>{{ t_cache_w }}</b></span></div>
-      </div>
+      <table class="table table--xsmall w--full">
+        <tr><td class="title">Input</td><td class="title text--right"><b>{{ t_input }}</b></td><td class="title">Output</td><td class="title text--right"><b>{{ t_output }}</b></td></tr>
+        <tr><td class="title">C/Read</td><td class="title text--right"><b>{{ t_cache_r }}</b></td><td class="title">C/Write</td><td class="title text--right"><b>{{ t_cache_w }}</b></td></tr>
+      </table>
 
       <div class="flex flex--between mt--xsmall">
         <div><span class="label">Total</span> <span class="value value--xsmall"><b>{{ t_total }}</b></span></div>
@@ -52,7 +39,6 @@
 
       <!-- Models -->
       <div class="label label--underline mt--small mb--xsmall"><b>Models (7d)</b></div>
-
       {% if m1_name != "" %}
       <div class="mb--xsmall">
         <div class="flex flex--between"><span class="label"><b>{{ m1_name }}</b></span><span class="label">{{ m1_tokens }} · {{ m1_pct }}%</span></div>
@@ -74,9 +60,7 @@
         <span class="label">{% if streak > 1 %}<b>{{ streak }}d streak</b>{% endif %}</span>
       </div>
 
-      {% if active > 0 %}
-      <div class="label mt--small">● {{ active }} active session{{ active | pluralize: "", "s" }}</div>
-      {% endif %}
+      {% if active > 0 %}<div class="label mt--small">● {{ active }} active</div>{% endif %}
     </div>
 
     <div class="title_bar">
