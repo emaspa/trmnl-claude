@@ -140,23 +140,6 @@ Register-ScheduledTask -TaskName "claude-trmnl" `
   -Action $action -Trigger $trigger -Settings $settings
 ```
 
-## Comparison with claude-usage-trmnl
-
-| Feature | [claude-usage-trmnl](https://github.com/carledwards/claude-usage-trmnl) | claude-trmnl |
-|---------|------|---|
-| Data source | Screen-scrapes `/usage` via pexpect | Local files + optional PTY scrape |
-| Dependencies | pexpect, pyte | Optional pywinpty or pexpect |
-| Platform | macOS only | Windows, macOS, Linux |
-| Metrics | 3 percentage bars | 15+ metrics |
-| Usage limits | Session/week/sonnet % | Session/week/sonnet % with reset times |
-| Token breakdown | No | Input/output/cache read/cache write |
-| Cost tracking | No | API-equivalent cost |
-| Model breakdown | No | Per-model % with progress bars |
-| Sparkline | No | 7-day activity trend |
-| Streak counter | No | Consecutive usage days |
-| Active sessions | No | Live session count |
-| Subscription info | No | Plan type + tier |
-
 ## License
 
 GPL-3.0 -- see [LICENSE](LICENSE)
