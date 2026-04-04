@@ -1,10 +1,10 @@
-    <div class="layout layout--col layout--top" style="padding:12px 28px;">
+    <div class="layout layout--col layout--top py--3 px--7">
 
       <!-- Header -->
       <table class="w--full mb--xsmall" style="border-collapse:collapse;">
         <tr>
-          <td class="title" style="font-size:28px; letter-spacing:2px;">CLAUDE CODE</td>
-          <td class="title text--right" style="font-size:20px;"><b>{{ sub }}</b> <span style="font-size:16px;">{{ tier }}</span>{% if active > 0 %} <span style="font-size:16px;">● {{ active }} active</span>{% endif %}</td>
+          <td class="title" style="letter-spacing:2px;">CLAUDE CODE</td>
+          <td class="title title--small text--right"><b>{{ sub }}</b> {{ tier }}{% if active > 0 %} ● {{ active }} active{% endif %}</td>
         </tr>
       </table>
 
@@ -12,129 +12,127 @@
       {% if u_session != "—" %}
       <table class="w--full mb--xsmall" style="border-collapse:collapse;">
         <tr>
-          <td class="title" style="font-size:20px; padding:2px 0;"><b>Session {{ u_session }}%</b></td>
-          <td class="title" style="font-size:20px; padding:2px 0;"><b>Week {{ u_week }}%</b></td>
-          <td class="title" style="font-size:20px; padding:2px 0;"><b>Sonnet {{ u_sonnet }}%</b></td>
-          <td class="title text--right" style="font-size:16px; padding:2px 0;"><b>{{ u_reset }}</b></td>
+          <td class="title title--small py--0.5"><b>Session {{ u_session }}%</b></td>
+          <td class="title title--small py--0.5"><b>Week {{ u_week }}%</b></td>
+          <td class="title title--small py--0.5"><b>Sonnet {{ u_sonnet }}%</b></td>
+          <td class="title title--small text--right py--0.5"><b>Resets {{ u_reset }}</b></td>
         </tr>
         <tr>
-          <td style="padding:2px 6px 2px 0;"><div class="progress-bar progress-bar--small"><div class="track"><div class="fill" style="width:{{ u_session }}%"></div></div></div></td>
-          <td style="padding:2px 6px 2px 0;"><div class="progress-bar progress-bar--small"><div class="track"><div class="fill" style="width:{{ u_week }}%"></div></div></div></td>
-          <td style="padding:2px 6px 2px 0;"><div class="progress-bar progress-bar--small"><div class="track"><div class="fill" style="width:{{ u_sonnet }}%"></div></div></div></td>
+          <td class="py--0.5 pr--1.5"><div class="progress-bar progress-bar--small"><div class="track"><div class="fill" style="width:{{ u_session }}%"></div></div></div></td>
+          <td class="py--0.5 pr--1.5"><div class="progress-bar progress-bar--small"><div class="track"><div class="fill" style="width:{{ u_week }}%"></div></div></div></td>
+          <td class="py--0.5 pr--1.5"><div class="progress-bar progress-bar--small"><div class="track"><div class="fill" style="width:{{ u_sonnet }}%"></div></div></div></td>
           <td></td>
         </tr>
       </table>
       {% endif %}
 
       <!-- Body -->
-      <table class="w--full" style="border-collapse:collapse; margin-top:16px;">
-        <tr>
-          <td style="vertical-align:top; width:46%; padding-right:20px;">
+      <div class="flex flex--top mt--4 w--full">
+        <div class="pr--5" style="width:46%;">
 
-            <p class="title mb--small" style="font-size:20px; letter-spacing:1.5px; margin-top:0; border-bottom:1px solid #000; padding-bottom:3px;">
-              <b>Today {% if trend == "up" %}&#8599;{% elsif trend == "down" %}&#8600;{% elsif trend == "flat" %}&#8594;{% endif %}</b>
-            </p>
+          <p class="title title--small mb--3 mt--0 pb--1" style="letter-spacing:1.5px; border-bottom:1px solid #000;">
+            <b>Today {% if trend == "up" %}&#8599;{% elsif trend == "down" %}&#8600;{% elsif trend == "flat" %}&#8594;{% endif %}</b>
+          </p>
 
-            <table class="w--full" style="font-size:16px; border-collapse:collapse;">
-              <tr>
-                <td class="title" style="padding:2px 16px 2px 0;">Input</td>
-                <td class="title text--right"><b>{{ t_input }}</b></td>
-              </tr>
-              <tr>
-                <td class="title" style="padding:2px 16px 2px 0;">Output</td>
-                <td class="title text--right"><b>{{ t_output }}</b></td>
-              </tr>
-              <tr>
-                <td class="title" style="padding:2px 16px 2px 0;">Cache Read</td>
-                <td class="title text--right"><b>{{ t_cache_r }}</b></td>
-              </tr>
-              <tr>
-                <td class="title" style="padding:2px 16px 2px 0;">Cache Write</td>
-                <td class="title text--right"><b>{{ t_cache_w }}</b></td>
-              </tr>
-              <tr><td colspan="2" class="py--xsmall"><div class="divider"></div></td></tr>
-              <tr>
-                <td class="title" style="padding:2px 16px 2px 0;">Total</td>
-                <td class="title text--right" style="font-size:26px;"><b>{{ t_total }}</b></td>
-              </tr>
-              <tr>
-                <td class="title" style="padding:2px 16px 2px 0;">API equiv.</td>
-                <td class="title text--right"><b>~{{ t_cost }}</b></td>
-              </tr>
-              <tr>
-                <td class="title" style="padding:2px 16px 2px 0;">Sessions</td>
-                <td class="title text--right"><b>{{ t_sessions }}</b></td>
-              </tr>
-              <tr>
-                <td class="title" style="padding:2px 16px 2px 0;">Messages</td>
-                <td class="title text--right"><b>{{ t_messages }}</b></td>
-              </tr>
-            </table>
+          <table class="w--full" style="border-collapse:collapse;">
+            <tr>
+              <td class="title title--small py--0.5 pr--4">Input</td>
+              <td class="title title--small text--right"><b>{{ t_input }}</b></td>
+            </tr>
+            <tr>
+              <td class="title title--small py--0.5 pr--4">Output</td>
+              <td class="title title--small text--right"><b>{{ t_output }}</b></td>
+            </tr>
+            <tr>
+              <td class="title title--small py--0.5 pr--4">Cache Read</td>
+              <td class="title title--small text--right"><b>{{ t_cache_r }}</b></td>
+            </tr>
+            <tr>
+              <td class="title title--small py--0.5 pr--4">Cache Write</td>
+              <td class="title title--small text--right"><b>{{ t_cache_w }}</b></td>
+            </tr>
+            <tr><td colspan="2" class="py--xsmall"><div class="divider"></div></td></tr>
+            <tr>
+              <td class="title title--small py--0.5 pr--4">Total</td>
+              <td class="value text--right"><b>{{ t_total }}</b></td>
+            </tr>
+            <tr>
+              <td class="title title--small py--0.5 pr--4">API equiv.</td>
+              <td class="title title--small text--right"><b>~{{ t_cost }}</b></td>
+            </tr>
+            <tr>
+              <td class="title title--small py--0.5 pr--4">Sessions</td>
+              <td class="title title--small text--right"><b>{{ t_sessions }}</b></td>
+            </tr>
+            <tr>
+              <td class="title title--small py--0.5 pr--4">Messages</td>
+              <td class="title title--small text--right"><b>{{ t_messages }}</b></td>
+            </tr>
+          </table>
 
-          </td>
-          <td class="border--v-1" style="vertical-align:top; width:54%; padding-left:20px;">
+        </div>
+        <div class="border--v-1 pl--5" style="width:54%;">
 
-            <p class="title mb--small" style="font-size:20px; letter-spacing:1.5px; margin-top:0; border-bottom:1px solid #000; padding-bottom:3px;">
-              <b>Models (7d)</b>
-            </p>
+          <p class="title title--small mb--3 mt--0 pb--1" style="letter-spacing:1.5px; border-bottom:1px solid #000;">
+            <b>Models (7d)</b>
+          </p>
 
-            {% if m1_name != "" %}
-            <div class="mb--small">
-              <div class="flex flex--between mb--xsmall" style="font-size:16px;">
-                <span class="title"><b>{{ m1_name }}</b></span>
-                <span class="title">{{ m1_tokens }} &middot; {{ m1_pct }}%</span>
-              </div>
-              <div class="progress-bar progress-bar--small"><div class="track"><div class="fill" style="width:{{ m1_pct }}%"></div></div></div>
+          {% if m1_name != "" %}
+          <div class="mb--3">
+            <div class="flex flex--between mb--1">
+              <span class="title title--small"><b>{{ m1_name }}</b></span>
+              <span class="title title--small">{{ m1_tokens }} &middot; {{ m1_pct }}%</span>
             </div>
-            {% endif %}
+            <div class="progress-bar progress-bar--small"><div class="track"><div class="fill" style="width:{{ m1_pct }}%"></div></div></div>
+          </div>
+          {% endif %}
 
-            {% if m2_name != "" %}
-            <div class="mb--small">
-              <div class="flex flex--between mb--xsmall" style="font-size:16px;">
-                <span class="title"><b>{{ m2_name }}</b></span>
-                <span class="title">{{ m2_tokens }} &middot; {{ m2_pct }}%</span>
-              </div>
-              <div class="progress-bar progress-bar--small"><div class="track"><div class="fill" style="width:{{ m2_pct }}%"></div></div></div>
+          {% if m2_name != "" %}
+          <div class="mb--3">
+            <div class="flex flex--between mb--1">
+              <span class="title title--small"><b>{{ m2_name }}</b></span>
+              <span class="title title--small">{{ m2_tokens }} &middot; {{ m2_pct }}%</span>
             </div>
-            {% endif %}
+            <div class="progress-bar progress-bar--small"><div class="track"><div class="fill" style="width:{{ m2_pct }}%"></div></div></div>
+          </div>
+          {% endif %}
 
-            {% if m3_name != "" %}
-            <div class="mb--small">
-              <div class="flex flex--between mb--xsmall" style="font-size:16px;">
-                <span class="title"><b>{{ m3_name }}</b></span>
-                <span class="title">{{ m3_tokens }} &middot; {{ m3_pct }}%</span>
-              </div>
-              <div class="progress-bar progress-bar--small"><div class="track"><div class="fill" style="width:{{ m3_pct }}%"></div></div></div>
+          {% if m3_name != "" %}
+          <div class="mb--3">
+            <div class="flex flex--between mb--1">
+              <span class="title title--small"><b>{{ m3_name }}</b></span>
+              <span class="title title--small">{{ m3_tokens }} &middot; {{ m3_pct }}%</span>
             </div>
-            {% endif %}
+            <div class="progress-bar progress-bar--small"><div class="track"><div class="fill" style="width:{{ m3_pct }}%"></div></div></div>
+          </div>
+          {% endif %}
 
-            <p class="title mb--small" style="font-size:20px; letter-spacing:1.5px; border-bottom:1px solid #000; padding-bottom:3px; margin-top:16px;">
-              <b>This Week</b>
-            </p>
+          <p class="title title--small mb--3 mt--4 pb--1" style="letter-spacing:1.5px; border-bottom:1px solid #000;">
+            <b>This Week</b>
+          </p>
 
-            <table class="w--full" style="font-size:16px; border-collapse:collapse;">
-              <tr>
-                <td class="title" style="padding:2px 0;"><b>{{ w_tokens }}</b> tokens</td>
-                <td class="title text--right" style="padding:2px 0;">~{{ w_cost }}</td>
-              </tr>
-              <tr>
-                <td class="title" style="padding:2px 0;">{{ w_sessions }} sessions</td>
-                <td class="title text--right" style="padding:2px 0;">{{ w_messages }} msgs</td>
-              </tr>
-            </table>
+          <table class="w--full" style="border-collapse:collapse;">
+            <tr>
+              <td class="title title--small py--0.5"><b>{{ w_tokens }}</b> tokens</td>
+              <td class="title title--small text--right py--0.5">~{{ w_cost }}</td>
+            </tr>
+            <tr>
+              <td class="title title--small py--0.5">{{ w_sessions }} sessions</td>
+              <td class="title title--small text--right py--0.5">{{ w_messages }} msgs</td>
+            </tr>
+          </table>
 
-            <table class="w--full mt--small" style="font-size:16px; border-collapse:collapse;">
-              <tr>
-                <td class="title" style="padding:2px 0; font-size:24px; letter-spacing:2px;">{{ spark }}</td>
-                <td class="title text--right" style="padding:2px 0;">
-                  {% if streak > 1 %}<b>{{ streak }}d streak</b>{% endif %}
-                </td>
-              </tr>
-            </table>
+          <table class="w--full mt--small" style="border-collapse:collapse;">
+            <tr>
+              <td class="title title--small py--0.5" style="letter-spacing:2px;">{{ spark }}</td>
+              <td class="title title--small text--right py--0.5">
+                {% if streak > 1 %}<b>{{ streak }}d streak</b>{% endif %}
+              </td>
+            </tr>
+          </table>
 
-          </td>
-        </tr>
-      </table>
+        </div>
+      </div>
 
     </div>
 
