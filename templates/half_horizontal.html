@@ -29,7 +29,7 @@
           <p class="title title--small mb--2 mt--0 pb--0.5" style="letter-spacing:1px; border-bottom:1px solid #000;">
             <b>Today {% if trend == "up" %}&#8599;{% elsif trend == "down" %}&#8600;{% endif %}</b>
           </p>
-          <span class="value"><b>{{ t_total }}</b></span>
+          <span class="value value--small"><b>{{ t_total }}</b></span>
           <div class="title title--small mt--0.5">~{{ t_cost }} · {{ t_sessions }}s · {{ t_messages }}m</div>
         </div>
         <div class="px--3" style="width:34%; border-left:1px solid #ddd;">
@@ -65,12 +65,12 @@
           <p class="title title--small mb--2 mt--0 pb--0.5" style="letter-spacing:1px; border-bottom:1px solid #000;">
             <b>Week</b>
           </p>
-          <span class="value value--small"><b>{{ w_tokens }}</b></span>
-          <div class="title title--small mt--0.5">~{{ w_cost }} · {{ w_sessions }}s</div>
-          <div class="mt--1">
+          <span class="value value--xsmall"><b>{{ w_tokens }}</b></span>
+          <div class="title title--small">~{{ w_cost }} · {{ w_sessions }}s</div>
+          <div class="mt--0.5">
             <span class="title title--small" style="letter-spacing:2px;">{{ spark }}</span>
           </div>
-          {% if streak > 1 %}<div class="title title--small mt--1"><b>{{ streak }}d streak</b></div>{% endif %}
+          {% if streak > 1 %}<div class="title title--small"><b>{{ streak }}d streak</b></div>{% endif %}
         </div>
       </div>
 
