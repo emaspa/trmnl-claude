@@ -1,61 +1,54 @@
 <div class="screen">
-  <div class="view view--quadrant">
-    <div class="layout layout--col layout--top" style="padding:8px 14px;">
+  <div class="view">
+    <div class="layout layout--col layout--top p--small">
 
       <!-- Header -->
-      <div style="display:flex; justify-content:space-between; align-items:baseline; width:100%;">
-        <span class="title" style="font-size:14px; letter-spacing:1px;">CLAUDE CODE</span>
-        <span class="title" style="font-size:12px;"><b>{{ sub }}</b> {{ tier }}</span>
+      <div class="flex flex--between flex--bottom w--full">
+        <span class="label label--large"><b>CLAUDE CODE</b></span>
+        <span class="label"><b>{{ sub }}</b> {{ tier }}</span>
       </div>
 
       {% if u_session != "—" %}
-      <table style="width:100%; border-collapse:collapse; margin:2px 0;">
-        <tr>
-          <td class="title" style="font-size:11px; padding:1px 0;"><b>S {{ u_session }}%</b></td>
-          <td class="title" style="font-size:11px; padding:1px 0;"><b>W {{ u_week }}%</b></td>
-          <td class="title" style="font-size:11px; padding:1px 0;"><b>Son {{ u_sonnet }}%</b></td>
-        </tr>
-        <tr>
-          <td style="padding:1px 3px 1px 0;"><div style="height:4px; background:#ddd; width:100%;"><div style="height:100%; background:#000; width:{{ u_session }}%;"></div></div></td>
-          <td style="padding:1px 3px 1px 0;"><div style="height:4px; background:#ddd; width:100%;"><div style="height:100%; background:#000; width:{{ u_week }}%;"></div></div></td>
-          <td style="padding:1px 3px 1px 0;"><div style="height:4px; background:#ddd; width:100%;"><div style="height:100%; background:#000; width:{{ u_sonnet }}%;"></div></div></td>
-        </tr>
-      </table>
+      <div class="grid grid--cols-3 gap--xsmall w--full mt--xsmall">
+        <div>
+          <span class="label label--small"><b>S {{ u_session }}%</b></span>
+          <div class="progress-bar progress-bar--xsmall mt--xsmall">
+            <div class="track"><div class="fill" style="width:{{ u_session }}%"></div></div>
+          </div>
+        </div>
+        <div>
+          <span class="label label--small"><b>W {{ u_week }}%</b></span>
+          <div class="progress-bar progress-bar--xsmall mt--xsmall">
+            <div class="track"><div class="fill" style="width:{{ u_week }}%"></div></div>
+          </div>
+        </div>
+        <div>
+          <span class="label label--small"><b>Son {{ u_sonnet }}%</b></span>
+          <div class="progress-bar progress-bar--xsmall mt--xsmall">
+            <div class="track"><div class="fill" style="width:{{ u_sonnet }}%"></div></div>
+          </div>
+        </div>
+      </div>
       {% endif %}
 
       <!-- Today -->
-      <table style="font-size:14px; border-collapse:collapse; width:100%; margin-top:4px;">
-        <tr>
-          <td class="title" style="font-size:12px;">Today {% if trend == "up" %}&#8599;{% elsif trend == "down" %}&#8600;{% endif %}</td>
-          <td class="title" style="text-align:right; font-size:28px;"><b>{{ t_total }}</b></td>
-        </tr>
-        <tr>
-          <td class="title" style="font-size:12px;" colspan="2">~{{ t_cost }} &middot; {{ t_messages }} msgs</td>
-        </tr>
-      </table>
+      <div class="mt--small">
+        <span class="label">Today {% if trend == "up" %}&#8599;{% elsif trend == "down" %}&#8600;{% endif %}</span>
+        <div class="value value--small"><b>{{ t_total }}</b></div>
+        <div class="label mt--xsmall">~{{ t_cost }} · {{ t_messages }} msgs</div>
+      </div>
 
       <!-- Week -->
-      <table style="font-size:12px; border-collapse:collapse; width:100%; margin-top:4px;">
-        <tr>
-          <td class="title">Week: <b>{{ w_tokens }}</b> &middot; ~{{ w_cost }}</td>
-        </tr>
-      </table>
-      <table style="border-collapse:collapse; width:100%; margin-top:4px;">
-        <tr>
-          <td class="title" style="font-size:18px; letter-spacing:2px;">{{ spark }}</td>
-          <td class="title" style="font-size:12px; text-align:right;">{% if streak > 1 %}<b>{{ streak }}d</b>{% endif %}</td>
-        </tr>
-      </table>
+      <div class="mt--small">
+        <span class="label">Week: <b>{{ w_tokens }}</b> · ~{{ w_cost }}</span>
+        <div class="flex flex--between mt--xsmall">
+          <span class="value value--xxsmall">{{ spark }}</span>
+          <span class="label">{% if streak > 1 %}<b>{{ streak }}d</b>{% endif %}</span>
+        </div>
+      </div>
 
       {% if active > 0 %}
-      <table style="font-size:11px; border-collapse:collapse; width:100%; margin-top:auto;">
-        <tr>
-          <td class="title">
-            <span style="display:inline-block; width:4px; height:4px; background:#000; border-radius:50%; vertical-align:middle; margin-right:2px;"></span>
-            {{ active }} active
-          </td>
-        </tr>
-      </table>
+      <div class="label mt--small">● {{ active }} active</div>
       {% endif %}
     </div>
 
