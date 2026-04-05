@@ -261,6 +261,9 @@ def _streak(daily):
     today = datetime.now(timezone.utc).date()
     s = 0
     d = today
+    # If no usage today yet, start counting from yesterday (handles timezone offsets)
+    if _day_total(daily, d.strftime("%Y-%m-%d")) == 0:
+        d -= timedelta(days=1)
     while _day_total(daily, d.strftime("%Y-%m-%d")) > 0:
         s += 1
         d -= timedelta(days=1)
