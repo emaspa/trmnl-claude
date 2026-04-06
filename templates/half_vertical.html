@@ -4,7 +4,7 @@
       <table class="w--full" style="border-collapse:collapse;">
         <tr>
           <td class="title" style="letter-spacing:1px;">CLAUDE CODE</td>
-          <td class="title title--small lg:title--base text--right"><b>{{ sub }}</b> {{ tier }}</td>
+          <td class="title title--small text--right"><b>{{ sub }}</b> {{ tier }}</td>
         </tr>
         <tr>
           <td colspan="2" class="description text--right">Updated {{ updated }}</td>
@@ -14,90 +14,90 @@
       {% if u_session != "—" %}
       <table class="w--full my--0.5" style="border-collapse:collapse;">
         <tr>
-          <td class="title title--small lg:title--base py--0.5"><b>Sess {{ u_session }}%</b></td>
-          <td class="title title--small lg:title--base py--0.5"><b>Week {{ u_week }}%</b></td>
-          <td class="title title--small lg:title--base py--0.5"><b>Son {{ u_sonnet }}%</b></td>
+          <td class="title title--small py--0.5"><b>Sess {{ u_session }}%</b></td>
+          <td class="title title--small py--0.5"><b>Week {{ u_week }}%</b></td>
+          <td class="title title--small py--0.5"><b>Son {{ u_sonnet }}%</b></td>
         </tr>
         <tr>
-          <td class="py--0.5 pr--1"><div class="progress-bar progress-bar--xsmall lg:progress-bar--small"><div class="track"><div class="fill" style="width:{{ u_session }}%"></div></div></div></td>
-          <td class="py--0.5 pr--1"><div class="progress-bar progress-bar--xsmall lg:progress-bar--small"><div class="track"><div class="fill" style="width:{{ u_week }}%"></div></div></div></td>
-          <td class="py--0.5 pr--1"><div class="progress-bar progress-bar--xsmall lg:progress-bar--small"><div class="track"><div class="fill" style="width:{{ u_sonnet }}%"></div></div></div></td>
+          <td class="py--0.5 pr--1"><div class="progress-bar progress-bar--xsmall"><div class="track"><div class="fill" style="width:{{ u_session }}%"></div></div></div></td>
+          <td class="py--0.5 pr--1"><div class="progress-bar progress-bar--xsmall"><div class="track"><div class="fill" style="width:{{ u_week }}%"></div></div></div></td>
+          <td class="py--0.5 pr--1"><div class="progress-bar progress-bar--xsmall"><div class="track"><div class="fill" style="width:{{ u_sonnet }}%"></div></div></div></td>
         </tr>
       </table>
       {% endif %}
 
       <!-- Today -->
-      <p class="title title--small lg:title--base mt--1 mb--2 pb--0.5" style="letter-spacing:1px; border-bottom:1px solid #000;">
+      <p class="title title--small mt--1 mb--2 pb--0.5" style="letter-spacing:1px; border-bottom:1px solid #000;">
         <b>Today {% if trend == "up" %}&#8599;{% elsif trend == "down" %}&#8600;{% endif %}</b>
       </p>
 
       <table class="w--full" style="border-collapse:collapse;">
         <tr>
-          <td class="title title--small lg:title--base pr--2">Input</td>
-          <td class="title title--small lg:title--base text--right"><b>{{ t_input }}</b></td>
+          <td class="title title--small pr--2">Input</td>
+          <td class="title title--small text--right"><b>{{ t_input }}</b></td>
           <td style="width:12px;"></td>
-          <td class="title title--small lg:title--base pr--2">Output</td>
-          <td class="title title--small lg:title--base text--right"><b>{{ t_output }}</b></td>
+          <td class="title title--small pr--2">Output</td>
+          <td class="title title--small text--right"><b>{{ t_output }}</b></td>
         </tr>
         <tr>
-          <td class="title title--small lg:title--base pr--2">C/Read</td>
-          <td class="title title--small lg:title--base text--right"><b>{{ t_cache_r }}</b></td>
+          <td class="title title--small pr--2">C/Read</td>
+          <td class="title title--small text--right"><b>{{ t_cache_r }}</b></td>
           <td></td>
-          <td class="title title--small lg:title--base pr--2">C/Write</td>
-          <td class="title title--small lg:title--base text--right"><b>{{ t_cache_w }}</b></td>
+          <td class="title title--small pr--2">C/Write</td>
+          <td class="title title--small text--right"><b>{{ t_cache_w }}</b></td>
         </tr>
       </table>
 
       <table class="w--full mt--1" style="border-collapse:collapse;">
         <tr>
-          <td class="title title--small lg:title--base">Total</td>
+          <td class="title title--small">Total</td>
           <td class="value value--small text--right"><b>{{ t_total }}</b></td>
           <td style="width:12px;"></td>
-          <td class="title title--small lg:title--base">Cost</td>
-          <td class="title title--small lg:title--base text--right"><b>~{{ t_cost }}</b></td>
+          <td class="title title--small">Cost</td>
+          <td class="title title--small text--right"><b>~{{ t_cost }}</b></td>
         </tr>
         <tr>
-          <td class="title title--small lg:title--base" colspan="5">{{ t_sessions }} sessions · {{ t_messages }} msgs</td>
+          <td class="title title--small" colspan="5">{{ t_sessions }} sessions · {{ t_messages }} msgs</td>
         </tr>
       </table>
 
       <!-- Models -->
-      <p class="title title--small lg:title--base mt--1.5 mb--2 pb--0.5" style="letter-spacing:1px; border-bottom:1px solid #000;">
+      <p class="title title--small mt--1.5 mb--2 pb--0.5" style="letter-spacing:1px; border-bottom:1px solid #000;">
         <b>Models (7d)</b>
       </p>
 
       {% if m1_name != "" %}
       <div class="mb--2">
         <div class="flex flex--between mb--1">
-          <span class="title title--small lg:title--base"><b>{{ m1_name }}</b></span>
-          <span class="title title--small lg:title--base">{{ m1_tokens }} · {{ m1_pct }}%</span>
+          <span class="title title--small"><b>{{ m1_name }}</b></span>
+          <span class="title title--small">{{ m1_tokens }} · {{ m1_pct }}%</span>
         </div>
-        <div class="progress-bar progress-bar--xsmall lg:progress-bar--small"><div class="track"><div class="fill" style="width:{{ m1_pct }}%"></div></div></div>
+        <div class="progress-bar progress-bar--xsmall"><div class="track"><div class="fill" style="width:{{ m1_pct }}%"></div></div></div>
       </div>
       {% endif %}
       {% if m2_name != "" %}
       <div class="mb--2">
         <div class="flex flex--between mb--1">
-          <span class="title title--small lg:title--base"><b>{{ m2_name }}</b></span>
-          <span class="title title--small lg:title--base">{{ m2_tokens }} · {{ m2_pct }}%</span>
+          <span class="title title--small"><b>{{ m2_name }}</b></span>
+          <span class="title title--small">{{ m2_tokens }} · {{ m2_pct }}%</span>
         </div>
-        <div class="progress-bar progress-bar--xsmall lg:progress-bar--small"><div class="track"><div class="fill" style="width:{{ m2_pct }}%"></div></div></div>
+        <div class="progress-bar progress-bar--xsmall"><div class="track"><div class="fill" style="width:{{ m2_pct }}%"></div></div></div>
       </div>
       {% endif %}
 
       <!-- Week -->
-      <p class="title title--small lg:title--base mt--1.5 mb--2 pb--0.5" style="letter-spacing:1px; border-bottom:1px solid #000;">
+      <p class="title title--small mt--1.5 mb--2 pb--0.5" style="letter-spacing:1px; border-bottom:1px solid #000;">
         <b>This Week</b>
       </p>
-      <span class="title title--small lg:title--base"><b>{{ w_tokens }}</b> · ~{{ w_cost }} · {{ w_sessions }}s</span>
+      <span class="title title--small"><b>{{ w_tokens }}</b> · ~{{ w_cost }} · {{ w_sessions }}s</span>
       <table class="w--full mt--1" style="border-collapse:collapse;">
         <tr>
-          <td class="title title--small lg:title--base" style="letter-spacing:2px;">{{ spark }}</td>
-          <td class="title title--small lg:title--base text--right">{% if streak > 0 %}<b>{{ streak }}d streak</b>{% endif %}</td>
+          <td class="title title--small" style="letter-spacing:2px;">{{ spark }}</td>
+          <td class="title title--small text--right">{% if streak > 0 %}<b>{{ streak }}d streak</b>{% endif %}</td>
         </tr>
       </table>
 
       {% if active > 0 %}
-      <div class="title title--small lg:title--base mt--1">● {{ active }} active</div>
+      <div class="title title--small mt--1">● {{ active }} active</div>
       {% endif %}
     </div>
