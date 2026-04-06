@@ -1,9 +1,9 @@
-    <div class="layout layout--col layout--top py--2 px--5 lg:py--3 lg:px--7">
+    <div class="layout layout--col layout--top py--2 px--5">
 
       <!-- Header -->
       <table class="w--full pb--0.5" style="border-collapse:collapse;">
         <tr>
-          <td class="title lg:title--large" style="letter-spacing:1.5px;">CLAUDE CODE</td>
+          <td class="title" style="letter-spacing:1.5px;">CLAUDE CODE</td>
           <td class="title title--small lg:title--base text--right"><b>{{ sub }}</b> {{ tier }}{% if active > 0 %} ● {{ active }}{% endif %}</td>
         </tr>
       </table>
@@ -29,7 +29,7 @@
           <p class="title title--small lg:title--base mb--2 mt--0 pb--0.5" style="letter-spacing:1px; border-bottom:1px solid #000;">
             <b>Today {% if trend == "up" %}&#8599;{% elsif trend == "down" %}&#8600;{% endif %}</b>
           </p>
-          <span class="value value--small lg:value--base"><b>{{ t_total }}</b></span>
+          <span class="value value--small"><b>{{ t_total }}</b></span>
           <div class="title title--small lg:title--base mt--0.5">~{{ t_cost }} · {{ t_sessions }}s · {{ t_messages }}m</div>
         </div>
         <div class="px--3" style="width:34%; border-left:1px solid #ddd;">
@@ -74,10 +74,4 @@
         </div>
       </div>
 
-    </div>
-
-    <div class="title_bar">
-      <img class="image image--logo" src="https://usetrmnl.com/images/plugins/trmnl--render.svg" />
-      <span class="title">Claude Code Dashboard</span>
-      <span class="instance">Updated on {{ updated }}</span>
     </div>
