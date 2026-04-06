@@ -1,24 +1,24 @@
-    <div class="layout layout--col layout--top py--1 px--3.5 lg:py--2.5 lg:px--5">
+    <div class="layout layout--col layout--top py--1 px--3.5 lg:py--4 lg:px--7">
 
       <!-- Header -->
       <table class="w--full" style="border-collapse:collapse;">
         <tr>
-          <td class="title title--small lg:title--base" style="letter-spacing:1px;"><b>CLAUDE CODE</b></td>
-          <td class="title title--small lg:title--base text--right"><b>{{ sub }}</b> {{ tier }}{% if active > 0 %} ● {{ active }}{% endif %}</td>
+          <td class="title title--small lg:title--large" style="letter-spacing:1px;"><b>CLAUDE CODE</b></td>
+          <td class="title title--small lg:title--large text--right"><b>{{ sub }}</b> {{ tier }}{% if active > 0 %} ● {{ active }}{% endif %}</td>
         </tr>
       </table>
 
       {% if u_session != "—" %}
       <table class="w--full" style="border-collapse:collapse;">
         <tr>
-          <td class="title title--small lg:title--base py--0.5"><b>S {{ u_session }}%</b></td>
-          <td class="title title--small lg:title--base py--0.5"><b>W {{ u_week }}%</b></td>
-          <td class="title title--small lg:title--base py--0.5"><b>Son {{ u_sonnet }}%</b></td>
+          <td class="title title--small lg:title--large py--0.5"><b>S {{ u_session }}%</b></td>
+          <td class="title title--small lg:title--large py--0.5"><b>W {{ u_week }}%</b></td>
+          <td class="title title--small lg:title--large py--0.5"><b>Son {{ u_sonnet }}%</b></td>
         </tr>
         <tr>
-          <td class="py--0.5 pr--1"><div class="progress-bar progress-bar--xsmall lg:progress-bar--small"><div class="track"><div class="fill" style="width:{{ u_session }}%"></div></div></div></td>
-          <td class="py--0.5 pr--1"><div class="progress-bar progress-bar--xsmall lg:progress-bar--small"><div class="track"><div class="fill" style="width:{{ u_week }}%"></div></div></div></td>
-          <td class="py--0.5 pr--1"><div class="progress-bar progress-bar--xsmall lg:progress-bar--small"><div class="track"><div class="fill" style="width:{{ u_sonnet }}%"></div></div></div></td>
+          <td class="py--0.5 pr--1"><div class="progress-bar progress-bar--xsmall lg:progress-bar--base"><div class="track"><div class="fill" style="width:{{ u_session }}%"></div></div></div></td>
+          <td class="py--0.5 pr--1"><div class="progress-bar progress-bar--xsmall lg:progress-bar--base"><div class="track"><div class="fill" style="width:{{ u_week }}%"></div></div></div></td>
+          <td class="py--0.5 pr--1"><div class="progress-bar progress-bar--xsmall lg:progress-bar--base"><div class="track"><div class="fill" style="width:{{ u_sonnet }}%"></div></div></div></td>
         </tr>
       </table>
       {% endif %}
@@ -26,26 +26,26 @@
       <!-- Today -->
       <table class="w--full mt--0.5" style="border-collapse:collapse;">
         <tr>
-          <td class="title title--small lg:title--base">Today {% if trend == "up" %}&#8599;{% elsif trend == "down" %}&#8600;{% endif %}</td>
-          <td class="value value--xsmall lg:value--small text--right"><b>{{ t_total }}</b></td>
+          <td class="title title--small lg:title--large">Today {% if trend == "up" %}&#8599;{% elsif trend == "down" %}&#8600;{% endif %}</td>
+          <td class="value value--xsmall lg:value--base text--right"><b>{{ t_total }}</b></td>
         </tr>
         <tr>
-          <td class="title title--small lg:title--base" colspan="2">~{{ t_cost }} · {{ t_messages }} msgs</td>
+          <td class="title title--small lg:title--large" colspan="2">~{{ t_cost }} · {{ t_messages }} msgs</td>
         </tr>
       </table>
 
       <!-- Week -->
       <table class="w--full mt--0.5" style="border-collapse:collapse;">
         <tr>
-          <td class="title title--small lg:title--base">Week: <b>{{ w_tokens }}</b> · ~{{ w_cost }}</td>
+          <td class="title title--small lg:title--large">Week: <b>{{ w_tokens }}</b> · ~{{ w_cost }}</td>
         </tr>
       </table>
       <table class="w--full mt--0.5" style="border-collapse:collapse;">
         <tr>
-          <td class="title title--small lg:title--base" style="letter-spacing:2px;">{{ spark }}</td>
-          <td class="title title--small lg:title--base text--right">{% if streak > 0 %}<b>{{ streak }}d</b>{% endif %}</td>
+          <td class="title title--small lg:title--large" style="letter-spacing:2px;">{{ spark }}</td>
+          <td class="title title--small lg:title--large text--right">{% if streak > 0 %}<b>{{ streak }}d</b>{% endif %}</td>
         </tr>
       </table>
 
-      <div class="title title--small lg:title--base text--right mt--0.5">Updated on {{ updated }}</div>
+      <div class="title title--small lg:title--large text--right mt--0.5">Updated on {{ updated }}</div>
     </div>

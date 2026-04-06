@@ -1,27 +1,27 @@
-    <div class="layout layout--col layout--top py--2 px--5">
+    <div class="layout layout--col layout--top py--2 px--5 lg:py--4 lg:px--8">
 
       <!-- Header -->
       <table class="w--full pb--0.5" style="border-collapse:collapse;">
         <tr>
-          <td class="title" style="letter-spacing:1.5px;">CLAUDE CODE</td>
-          <td class="title title--small lg:title--base text--right"><b>{{ sub }}</b> {{ tier }}{% if active > 0 %} ● {{ active }}{% endif %}</td>
+          <td class="title lg:title--large" style="letter-spacing:1.5px;">CLAUDE CODE</td>
+          <td class="title title--small lg:title--large text--right"><b>{{ sub }}</b> {{ tier }}{% if active > 0 %} ● {{ active }}{% endif %}</td>
         </tr>
         <tr>
-          <td colspan="2" class="description text--right">Updated {{ updated }}</td>
+          <td colspan="2" class="description lg:description--large text--right">Updated {{ updated }}</td>
         </tr>
       </table>
 
       {% if u_session != "—" %}
       <table class="w--full mb--0.5" style="border-collapse:collapse;">
         <tr>
-          <td class="title title--small lg:title--base py--0.5"><b>Session {{ u_session }}%</b></td>
-          <td class="title title--small lg:title--base py--0.5"><b>Week {{ u_week }}%</b></td>
-          <td class="title title--small lg:title--base py--0.5"><b>Sonnet {{ u_sonnet }}%</b></td>
+          <td class="title title--small lg:title--large py--0.5"><b>Session {{ u_session }}%</b></td>
+          <td class="title title--small lg:title--large py--0.5"><b>Week {{ u_week }}%</b></td>
+          <td class="title title--small lg:title--large py--0.5"><b>Sonnet {{ u_sonnet }}%</b></td>
         </tr>
         <tr>
-          <td class="py--0.5 pr--1"><div class="progress-bar progress-bar--xsmall lg:progress-bar--small"><div class="track"><div class="fill" style="width:{{ u_session }}%"></div></div></div></td>
-          <td class="py--0.5 pr--1"><div class="progress-bar progress-bar--xsmall lg:progress-bar--small"><div class="track"><div class="fill" style="width:{{ u_week }}%"></div></div></div></td>
-          <td class="py--0.5 pr--1"><div class="progress-bar progress-bar--xsmall lg:progress-bar--small"><div class="track"><div class="fill" style="width:{{ u_sonnet }}%"></div></div></div></td>
+          <td class="py--0.5 pr--1"><div class="progress-bar progress-bar--xsmall lg:progress-bar--base"><div class="track"><div class="fill" style="width:{{ u_session }}%"></div></div></div></td>
+          <td class="py--0.5 pr--1"><div class="progress-bar progress-bar--xsmall lg:progress-bar--base"><div class="track"><div class="fill" style="width:{{ u_week }}%"></div></div></div></td>
+          <td class="py--0.5 pr--1"><div class="progress-bar progress-bar--xsmall lg:progress-bar--base"><div class="track"><div class="fill" style="width:{{ u_sonnet }}%"></div></div></div></td>
         </tr>
       </table>
       {% endif %}
@@ -29,51 +29,51 @@
       <!-- Content -->
       <div class="flex flex--top mt--0.5 w--full">
         <div class="pr--3" style="width:33%;">
-          <p class="title title--small lg:title--base mb--2 mt--0 pb--0.5" style="letter-spacing:1px; border-bottom:1px solid #000;">
+          <p class="title title--small lg:title--large mb--2 mt--0 pb--0.5" style="letter-spacing:1px; border-bottom:1px solid #000;">
             <b>Today {% if trend == "up" %}&#8599;{% elsif trend == "down" %}&#8600;{% endif %}</b>
           </p>
-          <span class="value value--small"><b>{{ t_total }}</b></span>
-          <div class="title title--small lg:title--base mt--0.5">~{{ t_cost }} · {{ t_sessions }}s · {{ t_messages }}m</div>
+          <span class="value value--small lg:value--large"><b>{{ t_total }}</b></span>
+          <div class="title title--small lg:title--large mt--0.5">~{{ t_cost }} · {{ t_sessions }}s · {{ t_messages }}m</div>
         </div>
         <div class="px--3" style="width:34%; border-left:1px solid #ddd;">
           {% if m1_name != "" %}
           <div class="mb--2">
             <div class="flex flex--between mb--1">
-              <span class="title title--small lg:title--base"><b>{{ m1_name }}</b></span>
-              <span class="title title--small lg:title--base">{{ m1_pct }}%</span>
+              <span class="title title--small lg:title--large"><b>{{ m1_name }}</b></span>
+              <span class="title title--small lg:title--large">{{ m1_pct }}%</span>
             </div>
-            <div class="progress-bar progress-bar--xsmall lg:progress-bar--small"><div class="track"><div class="fill" style="width:{{ m1_pct }}%"></div></div></div>
+            <div class="progress-bar progress-bar--xsmall lg:progress-bar--base"><div class="track"><div class="fill" style="width:{{ m1_pct }}%"></div></div></div>
           </div>
           {% endif %}
           {% if m2_name != "" %}
           <div class="mb--2">
             <div class="flex flex--between mb--1">
-              <span class="title title--small lg:title--base"><b>{{ m2_name }}</b></span>
-              <span class="title title--small lg:title--base">{{ m2_pct }}%</span>
+              <span class="title title--small lg:title--large"><b>{{ m2_name }}</b></span>
+              <span class="title title--small lg:title--large">{{ m2_pct }}%</span>
             </div>
-            <div class="progress-bar progress-bar--xsmall lg:progress-bar--small"><div class="track"><div class="fill" style="width:{{ m2_pct }}%"></div></div></div>
+            <div class="progress-bar progress-bar--xsmall lg:progress-bar--base"><div class="track"><div class="fill" style="width:{{ m2_pct }}%"></div></div></div>
           </div>
           {% endif %}
           {% if m3_name != "" %}
           <div>
             <div class="flex flex--between mb--1">
-              <span class="title title--small lg:title--base"><b>{{ m3_name }}</b></span>
-              <span class="title title--small lg:title--base">{{ m3_pct }}%</span>
+              <span class="title title--small lg:title--large"><b>{{ m3_name }}</b></span>
+              <span class="title title--small lg:title--large">{{ m3_pct }}%</span>
             </div>
-            <div class="progress-bar progress-bar--xsmall lg:progress-bar--small"><div class="track"><div class="fill" style="width:{{ m3_pct }}%"></div></div></div>
+            <div class="progress-bar progress-bar--xsmall lg:progress-bar--base"><div class="track"><div class="fill" style="width:{{ m3_pct }}%"></div></div></div>
           </div>
           {% endif %}
         </div>
         <div class="pl--3 text--right" style="width:33%; border-left:1px solid #ddd;">
-          <p class="title title--small lg:title--base mb--2 mt--0 pb--0.5" style="letter-spacing:1px; border-bottom:1px solid #000;">
+          <p class="title title--small lg:title--large mb--2 mt--0 pb--0.5" style="letter-spacing:1px; border-bottom:1px solid #000;">
             <b>Week</b>
           </p>
-          <span class="value value--xsmall lg:value--small"><b>{{ w_tokens }}</b></span>
-          <div class="title title--small lg:title--base">~{{ w_cost }} · {{ w_sessions }}s</div>
+          <span class="value value--xsmall lg:value--base"><b>{{ w_tokens }}</b></span>
+          <div class="title title--small lg:title--large">~{{ w_cost }} · {{ w_sessions }}s</div>
           <div class="mt--0.5">
-            <span class="title title--small lg:title--base" style="letter-spacing:2px;">{{ spark }}</span>
+            <span class="title title--small lg:title--large" style="letter-spacing:2px;">{{ spark }}</span>
           </div>
-          {% if streak > 0 %}<div class="title title--small lg:title--base"><b>{{ streak }}d streak</b></div>{% endif %}
+          {% if streak > 0 %}<div class="title title--small lg:title--large"><b>{{ streak }}d streak</b></div>{% endif %}
         </div>
       </div>
 
