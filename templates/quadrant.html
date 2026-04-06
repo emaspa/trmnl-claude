@@ -6,9 +6,6 @@
           <td class="title title--small lg:title--base" style="letter-spacing:1px;"><b>CLAUDE CODE</b></td>
           <td class="title title--small lg:title--base text--right"><b>{{ sub }}</b> {{ tier }}{% if active > 0 %} ● {{ active }}{% endif %}</td>
         </tr>
-        <tr>
-          <td colspan="2" class="description text--right">Updated {{ updated }}</td>
-        </tr>
       </table>
 
       {% if u_session != "—" %}
@@ -50,4 +47,5 @@
         </tr>
       </table>
 
+      <div class="description text--right mt--0.5">{{ updated }}</div>
     </div>
