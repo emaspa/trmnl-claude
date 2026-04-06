@@ -46,17 +46,7 @@ claude CLI (via PTY)  -->  session/weekly usage % + reset times
 
 ## Setup
 
-### 1. Create the TRMNL plugin
-
-1. Go to your [TRMNL dashboard](https://usetrmnl.com) > **Plugins** > **Private Plugin**
-2. Name it "Claude Code Dashboard"
-3. Set strategy to **Webhook**
-4. Copy the **Plugin UUID** from the settings
-5. Paste the template from `templates/full.html` into the markup editor
-
-Other template sizes available: `half_horizontal.html`, `half_vertical.html`, `quadrant.html`
-
-### 2. Install dependencies (optional)
+### 1. Install dependencies (optional)
 
 For live usage limit scraping:
 
@@ -70,7 +60,7 @@ pip install pexpect
 
 Without these, the dashboard still works -- it just won't show the session/weekly usage percentages. Use `--no-scrape` to skip.
 
-### 3. Configure
+### 2. Configure
 
 Set your Plugin UUID. Pick **one** of these approaches:
 
@@ -96,7 +86,7 @@ export TRMNL_PLUGIN_UUID="your-uuid-here"
 python claude_trmnl.py
 ```
 
-### 4. Run
+### 3. Run
 
 ```bash
 # Test locally (prints JSON, does not post)
@@ -112,7 +102,7 @@ python claude_trmnl.py --no-scrape
 python claude_trmnl.py --test
 ```
 
-### 5. Schedule
+### 4. Schedule
 
 Run every 5-10 minutes to keep your display updated.
 
@@ -167,7 +157,7 @@ Register-ScheduledTask -TaskName "claude-trmnl" `
 </plist>
 ```
 
-### 6. Live updates with Claude Code hooks (optional)
+### 5. Live updates with Claude Code hooks (optional)
 
 You can have Claude Code automatically push dashboard updates while you're actively using it. Add a `Notification` hook to `~/.claude/settings.json`:
 
