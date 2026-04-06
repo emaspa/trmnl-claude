@@ -90,11 +90,12 @@
       <table class="w--full mt--0.5" style="border-collapse:collapse;">
         <tr>
           <td class="title title--small" style="letter-spacing:2px;">{{ spark }}</td>
-          <td class="title title--small text--right">{% if streak > 0 %}<b>{{ streak }}d streak</b> · {% endif %}{{ updated }}</td>
+          <td class="title title--small text--right">{% if streak > 0 %}<b>{{ streak }}d streak</b>{% endif %}</td>
         </tr>
       </table>
 
-      {% if active > 0 %}
-      <div class="title title--small mt--0.5">● {{ active }} active</div>
-      {% endif %}
+      <div class="flex flex--between mt--0.5">
+        {% if active > 0 %}<span class="title title--small">● {{ active }} active</span>{% endif %}
+        <span class="title title--small">{{ updated }}</span>
+      </div>
     </div>
