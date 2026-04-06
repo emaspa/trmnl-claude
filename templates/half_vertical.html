@@ -6,9 +6,6 @@
           <td class="title" style="letter-spacing:1px;">CLAUDE CODE</td>
           <td class="title title--small text--right"><b>{{ sub }}</b> {{ tier }}</td>
         </tr>
-        <tr>
-          <td colspan="2" class="description text--right">Updated {{ updated }}</td>
-        </tr>
       </table>
 
       {% if u_session != "—" %}
@@ -93,7 +90,7 @@
       <table class="w--full mt--1" style="border-collapse:collapse;">
         <tr>
           <td class="title title--small" style="letter-spacing:2px;">{{ spark }}</td>
-          <td class="title title--small text--right">{% if streak > 0 %}<b>{{ streak }}d streak</b>{% endif %}</td>
+          <td class="title title--small text--right">{% if streak > 0 %}<b>{{ streak }}d streak</b> · {% endif %}{{ updated }}</td>
         </tr>
       </table>
 
