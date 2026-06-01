@@ -159,12 +159,12 @@ Register-ScheduledTask -TaskName "claude-trmnl" `
 
 ### 5. Live updates with Claude Code hooks (optional)
 
-You can have Claude Code automatically push dashboard updates while you're actively using it. Add a `Notification` hook to `~/.claude/settings.json`:
+You can have Claude Code automatically push dashboard updates while you're actively using it. Add a `Stop` hook to `~/.claude/settings.json` (fires after each response, so the dashboard stays fresh during active work):
 
 ```json
 {
   "hooks": {
-    "Notification": [
+    "Stop": [
       {
         "matcher": "",
         "hooks": [
@@ -183,7 +183,7 @@ On macOS/Linux:
 ```json
 {
   "hooks": {
-    "Notification": [
+    "Stop": [
       {
         "matcher": "",
         "hooks": [
@@ -197,6 +197,8 @@ On macOS/Linux:
   }
 }
 ```
+
+> Tip: A `Stop` hook runs after every response. The `--debounce 5` check runs first and exits instantly on throttled invocations (before any scraping), so the extra calls are essentially free. A `Notification` hook also works but mostly fires only after ~60s idle, so the dashboard won't refresh during continuous back-and-forth work.
 
 The `--debounce 5` flag ensures it only pushes once every 5 minutes (respecting TRMNL's 12/hour rate limit). The command runs in the background so it doesn't slow down your responses.
 

@@ -353,17 +353,21 @@ def _parse_usage_output(raw):
         '', raw
     )
     result = {}
+    # The /usage TUI is drawn with cursor positioning, so winpty capture often
+    # merges adjacent words ("Currentsession", "allmodels", "ResetsJun4") and
+    # drops the odd character ("Sonnet only" -> "Sonet nly"). Keep whitespace
+    # optional (\s*) and tolerate dropped letters so the percentages still parse.
     for key, pattern in {
-        "session": r"(?i)current\s+session",
-        "week_all": r"(?i)(?:current\s+)?week\s*[\(:]?\s*all\s+models",
-        "week_sonnet": r"(?i)(?:current\s+)?week\s*[\(:]?\s*sonnet",
+        "session": r"(?i)current\s*session",
+        "week_all": r"(?i)(?:current\s*)?week\s*\(?\s*all\s*models",
+        "week_sonnet": r"(?i)(?:current\s*)?week\s*\(?\s*son+et",
     }.items():
         m = re.search(pattern, clean)
         if not m:
             continue
         block = clean[m.start():m.start() + 400]
         pct = re.search(r'(\d+)\s*%', block)
-        reset = re.search(r'[Rr]esets?\s+(.+?)(?:\r|\n|$)', block)
+        reset = re.search(r'[Rr]esets?\s*(.+?)(?:\r|\n|$)', block)
         result[key] = {
             "pct": int(pct.group(1)) if pct else None,
             "resets": reset.group(1).strip() if reset else None,
@@ -584,6 +588,17 @@ def _mark_pushed():
 # ── CLI ──────────────────────────────────────────────────────────────
 
 def main():
+    # Windows consoles default to cp1252, which can't encode the block
+    # characters echoed back in TRMNL's response (sparkline/usage bars).
+    # Without this, the success print() raises UnicodeEncodeError *before*
+    # _mark_pushed() runs, so the debounce timestamp never updates and every
+    # Notification fires an un-throttled post until TRMNL rate-limits us.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError, OSError):
+            pass
+
     import argparse
     parser = argparse.ArgumentParser(
         description="Claude Code usage dashboard for TRMNL e-ink displays")
