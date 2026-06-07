@@ -325,23 +325,45 @@ def _scrape_usage_winpty(PtyProcess, threading):
 
 
 def _scrape_usage_pexpect(pexpect):
-    """macOS/Linux: use pexpect."""
+    """macOS/Linux: use pexpect.
+
+    pexpect's .before only holds bytes received before the last expect() match,
+    so it never captures the /usage panel (drawn after the prompt). Drain the
+    PTY continuously instead. The slash-command autocomplete also swallows the
+    first Enter, so type /usage, let the menu settle, then send an explicit CR.
+    """
     import time
-    proc = pexpect.spawn('claude', dimensions=(45, 180), encoding='utf-8', timeout=30)
+    buf = []
+
+    def drain(seconds):
+        end = time.time() + seconds
+        while time.time() < end:
+            try:
+                buf.append(proc.read_nonblocking(8192, timeout=0.4))
+            except Exception:
+                pass
+
+    proc = pexpect.spawn('claude', dimensions=(55, 200), encoding='utf-8', timeout=30)
     try:
         proc.expect([r'[>❯]', r'\u2570'], timeout=10)
     except Exception:
         pass
-    time.sleep(2)
-    proc.sendline('/usage')
-    time.sleep(8)
+    drain(6)            # wait for the TUI to come up
+    proc.send('/usage')
+    time.sleep(2)       # let the autocomplete menu render
+    proc.send('\r')     # submit the command
+    time.sleep(1)
+    proc.send('\r')     # extra CR in case the first was swallowed by autocomplete
+    drain(9)            # capture the usage panel as it draws
     proc.send('\x1b')
-    time.sleep(1)
+    time.sleep(0.5)
     proc.sendline('/exit')
-    time.sleep(1)
-    raw = proc.before or ""
-    proc.close()
-    return _parse_usage_output(raw)
+    drain(2)
+    try:
+        proc.close()
+    except Exception:
+        pass
+    return _parse_usage_output("".join(buf))
 
 
 def _parse_usage_output(raw):
