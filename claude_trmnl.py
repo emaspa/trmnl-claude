@@ -20,6 +20,7 @@ from pathlib import Path
 PRICING = {
     "claude-fable-5":    {"input": 10.0,  "output": 50.0, "cache_write": 12.50, "cache_read": 1.00},
     "claude-opus-4-6":   {"input": 5.0,   "output": 25.0, "cache_write": 6.25,  "cache_read": 0.50},
+    # Covers all Sonnet versions incl. Sonnet 5 (same sticker price)
     "claude-sonnet-4-6": {"input": 3.0,   "output": 15.0, "cache_write": 3.75,  "cache_read": 0.30},
     "claude-haiku-4-5":  {"input": 1.0,   "output": 5.0,  "cache_write": 1.25,  "cache_read": 0.10},
 }
