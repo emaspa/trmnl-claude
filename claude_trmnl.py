@@ -794,6 +794,10 @@ def _aggregate_local(claude_dir, since, include_other=False):
         # reports Unknown and has to borrow the answer from someone else.
         "sub": sub,
         "tier": tier,
+        # Which population this host counted. The poster passes its own setting
+        # when it collects, so these normally agree; a host that took over on
+        # its own schedule is how they come apart.
+        "include_other": bool(include_other),
         "daily": {k: {**v, "sessions": sorted(v["sessions"])} for k, v in daily.items()},
         "models": {k: dict(v) for k, v in models.items()},
         "projects": {k: dict(v) for k, v in projects.items()},
@@ -868,6 +872,14 @@ def _load_store():
         s["hosts"] = {}
     if not isinstance(s.get("last_post"), dict):
         s["last_post"] = {}
+    if not isinstance(s.get("last_post_by"), dict):
+        s["last_post_by"] = {}
+    # Stores written before posts were tracked per host carry only the single
+    # most recent one. Seed from it, or every secondary reads a master that has
+    # never posted and takes over on the first run after an upgrade.
+    lp = s["last_post"]
+    if lp.get("by") and lp.get("ts") and lp["by"] not in s["last_post_by"]:
+        s["last_post_by"][lp["by"]] = lp["ts"]
     if not isinstance(s.get("members"), dict):
         s["members"] = {}
     return s
@@ -935,6 +947,13 @@ def _merge_stores(into, other):
     if float(theirs.get("ts", 0)) > float(into["last_post"].get("ts", 0)):
         into["last_post"] = theirs
 
+    for host, ts in (other.get("last_post_by") or {}).items():
+        try:
+            if float(ts) > float(into["last_post_by"].get(host, 0) or 0):
+                into["last_post_by"][host] = ts
+        except (TypeError, ValueError):
+            continue
+
     # The cached limits travel with the store, which is the only way a host
     # that can't read them itself ever gets any.
     mine = into.get("limits") or {}
@@ -962,8 +981,15 @@ def _remote(host, extra_arg, stdin=None):
     return r if r.returncode == 0 else None
 
 
-def _pull_store(host):
-    r = _remote(host, "--emit-store")
+def _pull_store(host, include_other=False):
+    """Collect a host's store.
+
+    Whether models that aren't Anthropic's count is decided when a host scans,
+    not when the payload is built, so the poster passes its own setting along.
+    Otherwise a fleet where the hosts disagree posts a silent mixture.
+    """
+    arg = "--emit-store" + (" --include-other-models" if include_other else "")
+    r = _remote(host, arg)
     if r is None:
         return None
     try:
@@ -1338,8 +1364,21 @@ def _run_fleet(args, cfg):
     _ensure_member(store, me, now)
     store["hosts"][me] = _aggregate_local(cd, since, args.include_other_models)
 
+    def posted_ago(host):
+        try:
+            return now - float(store["last_post_by"].get(host, 0) or 0)
+        except (TypeError, ValueError):
+            return float("inf")
+
     def master_quiet_for():
-        return now - float(store["last_post"].get("ts", 0) or 0)
+        # Measured against the master's own last post, not the last post by
+        # anyone. A successor that took over would otherwise reset the very
+        # clock it checks, stand down against itself on its next run, and leave
+        # the display untouched for a whole takeover window at a time.
+        return posted_ago(cfg["master"])
+
+    def someone_ahead_posted():
+        return min((posted_ago(h["name"]) for h in others), default=float("inf"))
 
     if not is_master:
         rank = _successor_rank(cfg, store, me)
@@ -1357,13 +1396,16 @@ def _run_fleet(args, cfg):
     # freshest numbers every reachable host can give, not the poster's own
     # beside a set of cached ones.
     for h in others:
-        got = _pull_store(h)
+        got = _pull_store(h, args.include_other_models)
         if got:
             _merge_stores(store, got)
 
     # Collecting can reveal that the master, or a successor further up the
     # queue, has posted in the meantime. Yield instead of posting over them.
-    if not is_master and master_quiet_for() <= cfg["takeover_after_min"] * 60:
+    # Any other host counts here, not just the master: while the master is away
+    # the point is that exactly one successor drives the display.
+    if not is_master and min(master_quiet_for(),
+                             someone_ahead_posted()) <= cfg["takeover_after_min"] * 60:
         _save_store(store)
         return
 
@@ -1382,14 +1424,26 @@ def _run_fleet(args, cfg):
         if now - float(cached.get("ts", 0) or 0) < cfg["stale_after_min"] * 60:
             limits = cached.get("data") or {}
 
+    # Configured hosts only. A machine dropped from the config still has an
+    # entry in everyone's store, and counting it would keep its tokens in the
+    # weekly total indefinitely and push the marker past the host count.
+    counted = {n: a for n, a in store["hosts"].items()
+               if any(h["name"] == n for h in cfg["hosts"])}
+
+    # Summing hosts that counted different populations gives a total that means
+    # nothing in particular, and nothing on the display would show it.
+    odd = sorted(n for n, a in counted.items()
+                 if bool(a.get("include_other")) != bool(args.include_other_models))
+    if odd:
+        print(f"Warning: {', '.join(odd)} scanned with a different "
+              f"--include-other-models setting than this host, so the totals "
+              f"mix models that aren't Anthropic's with ones that exclude them.",
+              file=sys.stderr)
+
     payload = build_payload(
         usage_method="off" if args.no_scrape else args.usage_method,
         model_ttl_min=args.model_limit_ttl,
-        # Configured hosts only. A machine dropped from the config still has an
-        # entry in everyone's store, and counting it would keep its tokens in
-        # the weekly total indefinitely and push the marker past the host count.
-        aggregates=[a for n, a in store["hosts"].items()
-                    if any(h["name"] == n for h in cfg["hosts"])],
+        aggregates=list(counted.values()),
         stale_cut=now - cfg["stale_after_min"] * 60,
         hosts_total=len(cfg["hosts"]),
         usage_limits=limits,
@@ -1402,6 +1456,7 @@ def _run_fleet(args, cfg):
     post_to_trmnl(payload)
     _mark_pushed()
     store["last_post"] = {"ts": now, "by": me}
+    store["last_post_by"][me] = now
     _save_store(store)
 
     # The heartbeat rides along, so pushing is also how secondaries learn the
