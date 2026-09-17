@@ -731,7 +731,7 @@ def build_payload(usage_method="auto", model_ttl_min=None):
         # Third limit row: present only on plans that cap one model separately,
         # and the model varies -- u_model carries whichever one the panel named.
         "u_sonnet": usage_limits.get("week_model", {}).get("pct", "—"),
-        "u_model": usage_limits.get("week_model", {}).get("name", "Sonnet"),
+        "u_model": usage_limits.get("week_model", {}).get("name", "Model"),
         "u_reset": usage_limits.get("session", {}).get("resets", ""),
         # Timestamp
         "updated": updated,
