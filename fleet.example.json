@@ -1,0 +1,17 @@
+{
+  "_comment": [
+    "Copy to fleet.json on every machine that shares the display, identical on each.",
+    "Without this file the script posts its own stats alone, exactly as a single-machine install does.",
+    "'name' must match `hostname -s`. 'ssh' is how the master reaches that host;",
+    "the master's own entry needs none. 'cmd' defaults to ~/trmnl-claude/run.sh.",
+    "takeover_after_min: how long the master may go quiet before a secondary posts instead.",
+    "stale_after_min: how old a host's numbers may get before it stops counting as reporting."
+  ],
+  "master": "desk",
+  "takeover_after_min": 45,
+  "stale_after_min": 60,
+  "hosts": [
+    { "name": "desk" },
+    { "name": "openbox", "ssh": "openbox", "cmd": "~/trmnl-claude/run.sh" }
+  ]
+}

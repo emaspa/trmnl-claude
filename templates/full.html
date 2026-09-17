@@ -4,7 +4,7 @@
       <table class="w--full mb--xsmall" style="border-collapse:collapse;">
         <tr>
           <td class="title lg:title--xlarge" style="letter-spacing:2px;">CLAUDE CODE</td>
-          <td class="title title--small lg:title--large text--right"><b>{{ sub }}</b> {{ tier }}{% if active > 0 %} ● {{ active }} active{% endif %}</td>
+          <td class="title title--small lg:title--large text--right"><b>{{ sub }}</b> {{ tier }}{% if fleet != "" %} ● {{ fleet }}{% endif %}{% if active > 0 %} ● {{ active }} active{% endif %}</td>
         </tr>
       </table>
 

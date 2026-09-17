@@ -9,6 +9,8 @@ to a TRMNL private plugin via webhook. Zero dependencies beyond stdlib.
 import json
 import os
 import re
+import socket
+import subprocess
 import sys
 import urllib.request
 import urllib.error
@@ -637,9 +639,208 @@ def _parse_usage_output(raw):
     return result
 
 
+# ── Fleet ────────────────────────────────────────────────────────────
+#
+# Several machines can share one display. Each reads only its own ~/.claude,
+# so their numbers add up rather than overlap, but only one of them may post:
+# TRMNL keeps the last payload it received, so two hosts posting their own
+# halves means the display shows whichever half arrived most recently.
+#
+# The master pulls each secondary's store, merges, posts the sum, then pushes
+# the merged store back out. If it goes quiet for longer than the takeover
+# window, a secondary posts instead, pairing its own fresh scan with the last
+# figures it holds for everyone else. Because the store is keyed by host, a
+# secondary replaces its own entry and leaves the rest alone, so taking over
+# never double-counts. When the master returns it pulls those stores and keeps
+# the newest entry per host, which absorbs the outage with no special case.
+#
+# Secondaries never need to reach the master. The heartbeat travels inside the
+# store the master pushes, so a secondary decides whether to take over by
+# reading a local file. That matters: the master can ssh out, and the reverse
+# direction is usually not set up.
+
+FLEET_STORE_NAME = ".trmnl_fleet.json"
+_FLEET_DEFAULTS = {"takeover_after_min": 45, "stale_after_min": 60}
+_FLEET_REMOTE_CMD = "~/trmnl-claude/run.sh"
+_FLEET_SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8"]
+_FLEET_TIMEOUT = 120
+
+
+def _this_host():
+    return socket.gethostname().split(".")[0]
+
+
+def _fleet_config_path(explicit=None):
+    if explicit:
+        return Path(explicit)
+    env = os.environ.get("TRMNL_FLEET_CONFIG")
+    if env:
+        return Path(env)
+    return Path(__file__).resolve().parent / "fleet.json"
+
+
+def _load_fleet_config(explicit=None):
+    """Fleet config, or None for a single-machine install.
+
+    A missing, malformed or one-host config is not an error: it means this
+    install has no fleet, and everything behaves as it did before.
+    """
+    try:
+        cfg = json.loads(_fleet_config_path(explicit).read_text("utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(cfg, dict):
+        return None
+    hosts = [h for h in (cfg.get("hosts") or []) if isinstance(h, dict) and h.get("name")]
+    if len(hosts) < 2 or not cfg.get("master"):
+        return None
+    out = dict(_FLEET_DEFAULTS)
+    for k in _FLEET_DEFAULTS:
+        if isinstance(cfg.get(k), int) and cfg[k] > 0:
+            out[k] = cfg[k]
+    out["master"] = cfg["master"]
+    out["hosts"] = hosts
+    return out
+
+
+def _aggregate_local(claude_dir, since):
+    """This machine's contribution, in the shape hosts exchange.
+
+    Sets aren't JSON, so session ids travel as a sorted list and become a set
+    again on merge.
+    """
+    daily, models, projects = _scan_usage(claude_dir, since)
+    return {
+        "host": _this_host(),
+        "ts": datetime.now(timezone.utc).timestamp(),
+        "active": _count_active_sessions(claude_dir),
+        "daily": {k: {**v, "sessions": sorted(v["sessions"])} for k, v in daily.items()},
+        "models": {k: dict(v) for k, v in models.items()},
+        "projects": {k: dict(v) for k, v in projects.items()},
+    }
+
+
+def _merge_aggregates(aggs, stale_cut=None):
+    """Sum per-host aggregates into the shapes the payload renders from.
+
+    Counts add because hosts scan disjoint transcripts. Session ids union
+    instead: one session is one session, and ids are uuids, so a host can't
+    collide with another. Active sessions are a right-now reading, so a host
+    whose aggregate has gone stale contributes none.
+    """
+    daily = defaultdict(lambda: {
+        "input": 0, "output": 0, "cache_read": 0, "cache_write": 0,
+        "cost": 0.0, "messages": 0, "sessions": set(),
+    })
+    models = defaultdict(lambda: {"tokens": 0, "messages": 0, "cost": 0.0})
+    projects = defaultdict(lambda: {"tokens": 0, "messages": 0})
+    active = 0
+    fresh = 0
+
+    for a in aggs:
+        if not isinstance(a, dict):
+            continue
+        current = stale_cut is None or float(a.get("ts", 0)) >= stale_cut
+        fresh += 1 if current else 0
+        if current:
+            active += a.get("active", 0) or 0
+        for dk, dd in (a.get("daily") or {}).items():
+            d = daily[dk]
+            for f in ("input", "output", "cache_read", "cache_write", "messages"):
+                d[f] += dd.get(f, 0) or 0
+            d["cost"] += dd.get("cost", 0.0) or 0.0
+            d["sessions"] |= set(dd.get("sessions") or ())
+        for mk, md in (a.get("models") or {}).items():
+            m = models[mk]
+            m["tokens"] += md.get("tokens", 0) or 0
+            m["messages"] += md.get("messages", 0) or 0
+            m["cost"] += md.get("cost", 0.0) or 0.0
+        for pk, pd in (a.get("projects") or {}).items():
+            p = projects[pk]
+            p["tokens"] += pd.get("tokens", 0) or 0
+            p["messages"] += pd.get("messages", 0) or 0
+
+    return daily, models, projects, active, fresh
+
+
+def _fleet_store_path():
+    return _find_claude_dir() / FLEET_STORE_NAME
+
+
+def _load_store():
+    try:
+        s = json.loads(_fleet_store_path().read_text("utf-8"))
+    except (OSError, ValueError):
+        s = None
+    if not isinstance(s, dict):
+        s = {}
+    if not isinstance(s.get("hosts"), dict):
+        s["hosts"] = {}
+    if not isinstance(s.get("last_post"), dict):
+        s["last_post"] = {}
+    return s
+
+
+def _save_store(store):
+    try:
+        p = _fleet_store_path()
+        tmp = p.with_name(p.name + ".tmp")
+        tmp.write_text(json.dumps(store), encoding="utf-8")
+        tmp.replace(p)
+    except OSError:
+        pass
+
+
+def _merge_stores(into, other):
+    """Fold another host's store in, keeping the newest entry per host."""
+    if not isinstance(other, dict):
+        return into
+    for host, agg in (other.get("hosts") or {}).items():
+        if not isinstance(agg, dict):
+            continue
+        cur = into["hosts"].get(host)
+        if not cur or float(agg.get("ts", 0)) > float(cur.get("ts", 0)):
+            into["hosts"][host] = agg
+    theirs = other.get("last_post") or {}
+    if float(theirs.get("ts", 0)) > float(into["last_post"].get("ts", 0)):
+        into["last_post"] = theirs
+    return into
+
+
+def _remote(host, extra_arg, stdin=None):
+    """Run this script on another host. None if it can't be reached."""
+    target = host.get("ssh")
+    if not target:
+        return None
+    cmd = host.get("cmd") or _FLEET_REMOTE_CMD
+    try:
+        r = subprocess.run(
+            ["ssh", *_FLEET_SSH_OPTS, target, f"{cmd} {extra_arg}"],
+            input=stdin, capture_output=True, timeout=_FLEET_TIMEOUT)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return r if r.returncode == 0 else None
+
+
+def _pull_store(host):
+    r = _remote(host, "--emit-store")
+    if r is None:
+        return None
+    try:
+        return json.loads(r.stdout.decode("utf-8", errors="replace"))
+    except ValueError:
+        return None
+
+
+def _push_store(host, store):
+    return _remote(host, "--ingest-store",
+                   stdin=json.dumps(store).encode("utf-8")) is not None
+
+
 # ── Build TRMNL payload ─────────────────────────────────────────────
 
-def build_payload(usage_method="auto", model_ttl_min=None):
+def build_payload(usage_method="auto", model_ttl_min=None,
+                  aggregates=None, stale_cut=None, hosts_total=0):
     cd = _find_claude_dir()
     # Day boundaries follow the local clock, so "today" means the same thing
     # here as it does on the wall and in the usage reset times below.
@@ -648,8 +849,9 @@ def build_payload(usage_method="auto", model_ttl_min=None):
     seven_ago = today_start - timedelta(days=7)
 
     sub_type, tier = _read_credentials(cd)
-    active = _count_active_sessions(cd)
-    daily, models, projects = _scan_usage(cd, since=seven_ago)
+    if aggregates is None:
+        aggregates = [_aggregate_local(cd, since=seven_ago)]
+    daily, models, projects, active, fresh = _merge_aggregates(aggregates, stale_cut)
     usage_limits = ({} if usage_method == "off"
                     else _read_usage(usage_method, model_ttl_min))
 
@@ -705,6 +907,9 @@ def build_payload(usage_method="auto", model_ttl_min=None):
         "sub": sub_type,
         "tier": tier,
         "active": active,
+        # Reporting hosts out of configured ones, blank on a single machine.
+        # Without it, a host that stops reporting just looks like a quiet day.
+        "fleet": f"{fresh}/{hosts_total}" if hosts_total > 1 else "",
         # Today
         "t_input": fmt_tokens(t_in),
         "t_output": fmt_tokens(t_out),
@@ -793,6 +998,7 @@ def _test_payload():
         "sub": "Max",
         "tier": "20x",
         "active": 2,
+        "fleet": "2/2",
         "t_input": "1.2M",
         "t_output": "245K",
         "t_cache_r": "3.4M",
@@ -890,18 +1096,110 @@ def main():
                              "limit is above 80%%)")
     parser.add_argument("--debounce", type=int, metavar="MIN", default=0,
                         help="Skip if last push was less than MIN minutes ago")
+    parser.add_argument("--fleet-config", metavar="PATH", default=None,
+                        help="Fleet config file (default: fleet.json beside "
+                             "this script, or $TRMNL_FLEET_CONFIG)")
+    parser.add_argument("--no-fleet", action="store_true",
+                        help="Ignore the fleet config and post this host alone")
+    parser.add_argument("--emit-store", action="store_true",
+                        help="Print this host's fleet store as JSON and exit "
+                             "(how the master collects; prints nothing else)")
+    parser.add_argument("--ingest-store", action="store_true",
+                        help="Merge a fleet store read from stdin and exit "
+                             "(how the master pushes results back out)")
     args = parser.parse_args()
+
+    # Fleet plumbing. Neither posts, and --emit-store skips the usage limits
+    # entirely: the master reads those itself, and scraping them here would
+    # put a 20s PTY on the far end of every collection.
+    if args.emit_store:
+        cd = _find_claude_dir()
+        since = (datetime.now().astimezone().replace(
+            hour=0, minute=0, second=0, microsecond=0) - timedelta(days=7))
+        store = _load_store()
+        store["hosts"][_this_host()] = _aggregate_local(cd, since)
+        _save_store(store)
+        print(json.dumps(store))
+        return
+    if args.ingest_store:
+        try:
+            incoming = json.loads(sys.stdin.read())
+        except ValueError:
+            sys.exit(1)
+        _save_store(_merge_stores(_load_store(), incoming))
+        return
 
     if args.debounce and not _should_run(args.debounce):
         sys.exit(0)
 
     if args.test:
         payload = _test_payload()
-    else:
+        post_and_exit(payload, args)
+        return
+
+    cfg = None if args.no_fleet else _load_fleet_config(args.fleet_config)
+    if cfg is None:
         payload = build_payload(
             usage_method="off" if args.no_scrape else args.usage_method,
             model_ttl_min=args.model_limit_ttl)
+        post_and_exit(payload, args)
+        return
 
+    _run_fleet(args, cfg)
+
+
+def _run_fleet(args, cfg):
+    me = _this_host()
+    is_master = me == cfg["master"]
+    others = [h for h in cfg["hosts"] if h["name"] != me]
+    now = datetime.now(timezone.utc).timestamp()
+
+    cd = _find_claude_dir()
+    since = (datetime.now().astimezone().replace(
+        hour=0, minute=0, second=0, microsecond=0) - timedelta(days=7))
+
+    # Own entry is always a fresh scan; whatever the store held for this host
+    # is superseded, which is what keeps a takeover from counting us twice.
+    store = _load_store()
+    store["hosts"][me] = _aggregate_local(cd, since)
+
+    if is_master:
+        for h in others:
+            got = _pull_store(h)
+            if got:
+                _merge_stores(store, got)
+    else:
+        quiet_for = now - float(store["last_post"].get("ts", 0) or 0)
+        if quiet_for <= cfg["takeover_after_min"] * 60:
+            # Master is posting for all of us. Keep the fresh scan so it has
+            # something current to collect, and stay off the display.
+            _save_store(store)
+            return
+
+    payload = build_payload(
+        usage_method="off" if args.no_scrape else args.usage_method,
+        model_ttl_min=args.model_limit_ttl,
+        aggregates=list(store["hosts"].values()),
+        stale_cut=now - cfg["stale_after_min"] * 60,
+        hosts_total=len(cfg["hosts"]))
+
+    if args.dry_run:
+        print(json.dumps(payload, indent=2, default=str))
+        return
+
+    post_to_trmnl(payload)
+    _mark_pushed()
+    store["last_post"] = {"ts": now, "by": me}
+    _save_store(store)
+
+    # The heartbeat rides along, so pushing is also how secondaries learn the
+    # master is alive. A secondary that took over pushes to whoever it can
+    # reach, which is usually nobody until the master is back.
+    for h in others:
+        _push_store(h, store)
+
+
+def post_and_exit(payload, args):
     if args.dry_run:
         print(json.dumps(payload, indent=2, default=str))
     else:

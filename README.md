@@ -4,7 +4,7 @@ Advanced Claude Code usage dashboard for [TRMNL](https://usetrmnl.com) e-ink dis
 
 ![Claude Code Dashboard on TRMNL](screenshot.png)
 
-Reads local Claude Code session data and pulls live usage limits from the API's rate-limit headers. Cross-platform (Windows, macOS, Linux). Stdlib only. The fallback usage scraper needs `pywinpty` (Windows) or `pexpect` (Unix).
+Reads local Claude Code session data and pulls live usage limits from the API's rate-limit headers. Several machines can share one display and have their numbers added up. Cross-platform (Windows, macOS, Linux). Stdlib only. The fallback usage scraper needs `pywinpty` (Windows) or `pexpect` (Unix).
 
 ## What it shows
 
@@ -34,7 +34,7 @@ Reads local Claude Code session data and pulls live usage limits from the API's 
 api.anthropic.com     -->  session/weekly usage % + reset times
   (rate-limit headers)      (falls back to the /usage TUI over a PTY)
         |
-   claude_trmnl.py
+   claude_trmnl.py  <--ssh-->  other machines, if fleet.json says so
         |
    POST merge_variables
         |
@@ -106,6 +106,9 @@ python claude_trmnl.py --usage-method pty
 
 # Preview with sample multi-model data
 python claude_trmnl.py --test
+
+# Post this machine's stats alone, ignoring fleet.json
+python claude_trmnl.py --no-fleet
 ```
 
 ### How the token numbers are counted
@@ -140,6 +143,38 @@ Two other things to know about the header method:
 - **The headers are undocumented**, so they may change. That's the other reason the PTY scraper is still here rather than deleted.
 
 Anything that spawns `claude` on a short interval should also set `DISABLE_AUTOUPDATER=1`, which the PTY path now does for its own spawns. A scraper session lives about 25 seconds, which isn't long enough for the auto-updater to finish downloading a release. On a 5-minute schedule it restarts that download every run and leaves a truncated binary in `~/.cache/claude/staging` each time. Those only get cleaned up after an update that succeeds, so they accumulate. Interactive sessions and `claude update` are unaffected.
+
+### Sharing one display between machines
+
+TRMNL keeps the last payload it received. Two machines each posting their own numbers means the display shows whichever arrived most recently, flipping between halves of the picture instead of adding them together.
+
+`fleet.json` fixes that. Copy `fleet.example.json` to `fleet.json` on every machine, with identical contents:
+
+```json
+{
+  "master": "desk",
+  "takeover_after_min": 45,
+  "stale_after_min": 60,
+  "hosts": [
+    { "name": "desk" },
+    { "name": "openbox", "ssh": "openbox", "cmd": "~/trmnl-claude/run.sh" }
+  ]
+}
+```
+
+`name` has to match `hostname -s`. Without the file nothing changes, and the script posts its own stats the way a single-machine install always has.
+
+The master does the collecting. Each run it scans its own `~/.claude`, runs `ssh <host> run.sh --emit-store` against the others, merges what comes back and posts the sum. Secondaries scan themselves, leave the result where the master can pick it up, and stay off the display. Only one ssh direction needs to work, master to secondary, with key auth. Nothing connects back the other way.
+
+Hosts trade per-day, per-model and per-project aggregates rather than finished figures. A streak, a sparkline and a top project can't be reconstructed from two rendered totals. Session ids union rather than add, so a session spanning two machines counts once.
+
+If the master goes down, a secondary posts in its place. The master pushes the merged store to every host after each post, and that file carries the time of the last post, so a secondary decides by reading a local file rather than probing a machine that may be off. Once that timestamp is older than `takeover_after_min`, it posts its own fresh scan next to the last figures it holds for everyone else. The store is keyed by host, so it replaces its own entry and leaves the others untouched, which is what stops a takeover counting itself twice. When the master returns it collects those stores, keeps the newest entry per host, and carries on.
+
+The title bar shows how many hosts reported, `2/2`. A host whose numbers are older than `stale_after_min` stops counting as present and no longer contributes active sessions, though the tokens it already reported still count toward the week. Watch that marker. A machine that quietly stops reporting looks exactly like a quiet day otherwise, which is the failure this whole arrangement exists to prevent.
+
+Keep the timer running on every machine. A secondary finishes in under a second once it has saved its scan.
+
+One assumption worth knowing: hosts hold different transcripts. Per-response dedupe runs within a host, not across them, so syncing `~/.claude` between machines with something like Syncthing would count the shared sessions on both.
 
 ### 4. Schedule
 
