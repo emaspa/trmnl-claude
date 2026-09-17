@@ -719,10 +719,16 @@ def _aggregate_local(claude_dir, since):
     again on merge.
     """
     daily, models, projects = _scan_usage(claude_dir, since)
+    sub, tier = _read_credentials(claude_dir)
     return {
         "host": _this_host(),
         "ts": datetime.now(timezone.utc).timestamp(),
         "active": _count_active_sessions(claude_dir),
+        # Account-wide, so any host that can read them speaks for all of them.
+        # macOS keeps these in the Keychain rather than in a file, so a Mac
+        # reports Unknown and has to borrow the answer from someone else.
+        "sub": sub,
+        "tier": tier,
         "daily": {k: {**v, "sessions": sorted(v["sessions"])} for k, v in daily.items()},
         "models": {k: dict(v) for k, v in models.items()},
         "projects": {k: dict(v) for k, v in projects.items()},
@@ -745,6 +751,14 @@ def _merge_aggregates(aggs, stale_cut=None):
     projects = defaultdict(lambda: {"tokens": 0, "messages": 0})
     active = 0
     fresh = 0
+
+    # Newest host that could actually read the plan speaks for the account.
+    sub = tier = None
+    for a in sorted((x for x in aggs if isinstance(x, dict)),
+                    key=lambda x: float(x.get("ts", 0)), reverse=True):
+        if a.get("sub") and a["sub"] != "Unknown":
+            sub, tier = a["sub"], a.get("tier", "—")
+            break
 
     for a in aggs:
         if not isinstance(a, dict):
@@ -769,7 +783,7 @@ def _merge_aggregates(aggs, stale_cut=None):
             p["tokens"] += pd.get("tokens", 0) or 0
             p["messages"] += pd.get("messages", 0) or 0
 
-    return daily, models, projects, active, fresh
+    return daily, models, projects, active, fresh, sub, tier
 
 
 def _fleet_store_path():
@@ -889,7 +903,8 @@ def _push_store(host, store):
 # ── Build TRMNL payload ─────────────────────────────────────────────
 
 def build_payload(usage_method="auto", model_ttl_min=None,
-                  aggregates=None, stale_cut=None, hosts_total=0):
+                  aggregates=None, stale_cut=None, hosts_total=0,
+                  usage_limits=None):
     cd = _find_claude_dir()
     # Day boundaries follow the local clock, so "today" means the same thing
     # here as it does on the wall and in the usage reset times below.
@@ -900,9 +915,13 @@ def build_payload(usage_method="auto", model_ttl_min=None,
     sub_type, tier = _read_credentials(cd)
     if aggregates is None:
         aggregates = [_aggregate_local(cd, since=seven_ago)]
-    daily, models, projects, active, fresh = _merge_aggregates(aggregates, stale_cut)
-    usage_limits = ({} if usage_method == "off"
-                    else _read_usage(usage_method, model_ttl_min))
+    (daily, models, projects, active, fresh,
+     fleet_sub, fleet_tier) = _merge_aggregates(aggregates, stale_cut)
+    if sub_type == "Unknown" and fleet_sub:
+        sub_type, tier = fleet_sub, fleet_tier
+    if usage_limits is None:
+        usage_limits = ({} if usage_method == "off"
+                        else _read_usage(usage_method, model_ttl_min))
 
     # Today
     today_key = now.strftime("%Y-%m-%d")
@@ -1250,12 +1269,28 @@ def _run_fleet(args, cfg):
         _save_store(store)
         return
 
+    # Reading the limits needs the OAuth token from ~/.claude/.credentials.json,
+    # which macOS doesn't have: it keeps them in the Keychain. Rather than let a
+    # Mac's takeover blank the three bars, cache whatever the last host that
+    # could read them saw, and reuse it while it's worth showing. Past that the
+    # bars go blank on purpose, because a percentage that outlived its reset is
+    # worse than no percentage.
+    limits = ({} if args.no_scrape
+              else _read_usage(args.usage_method, args.model_limit_ttl))
+    if limits:
+        store["limits"] = {"ts": now, "data": limits}
+    else:
+        cached = store.get("limits") or {}
+        if now - float(cached.get("ts", 0) or 0) < cfg["stale_after_min"] * 60:
+            limits = cached.get("data") or {}
+
     payload = build_payload(
         usage_method="off" if args.no_scrape else args.usage_method,
         model_ttl_min=args.model_limit_ttl,
         aggregates=list(store["hosts"].values()),
         stale_cut=now - cfg["stale_after_min"] * 60,
-        hosts_total=len(cfg["hosts"]))
+        hosts_total=len(cfg["hosts"]),
+        usage_limits=limits)
 
     if args.dry_run:
         print(json.dumps(payload, indent=2, default=str))
