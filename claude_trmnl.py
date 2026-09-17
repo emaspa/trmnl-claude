@@ -50,6 +50,21 @@ _ANTHROPIC_FAMILIES = ("fable", "opus", "sonnet", "haiku")
 _FOREIGN_VENDORS = ("gpt", "qwen", "llama", "gemini", "mistral", "deepseek",
                     "grok", "kimi", "glm", "command-r", "phi")
 
+
+def _name_matcher(words):
+    """Match any of these names in a model id, on letter boundaries.
+
+    Plain substring matching reads "phi" inside "claude-delphi" and drops a
+    model that was Anthropic's all along. Digits are not a boundary, because
+    versions run straight into the name: "qwen3.8-max" has to match "qwen".
+    """
+    return re.compile(r"(?<![a-z])(?:%s)(?![a-z])"
+                      % "|".join(re.escape(w) for w in words))
+
+
+_ANTHROPIC_RE = _name_matcher(_ANTHROPIC_FAMILIES)
+_FOREIGN_RE = _name_matcher(_FOREIGN_VENDORS)
+
 CACHE_WRITE_MULT = {"5m": 1.25, "1h": 2.0}
 
 
@@ -121,9 +136,9 @@ def _is_anthropic(key):
     different population than the bars beside them.
     """
     n = (key or "").lower()
-    if any(f in n for f in _ANTHROPIC_FAMILIES):
+    if _ANTHROPIC_RE.search(n):
         return True
-    if any(v in n for v in _FOREIGN_VENDORS):
+    if _FOREIGN_RE.search(n):
         return False
     # An unfamiliar "claude-…" is most likely a family this version predates.
     # Counting it is the safer mistake: dropping real usage is worse than
@@ -1068,8 +1083,8 @@ def build_payload(usage_method="auto", model_ttl_min=None,
         # reportable rather than merely missing. Blank when there were none, or
         # when --include-other-models folded them into the figures instead. No
         # shipped template renders these.
-        "o_tokens": fmt_tokens(t_other) if t_other else "",
-        "o_messages": t_other_msgs if t_other else "",
+        "o_tokens": fmt_tokens(t_other),
+        "o_messages": t_other_msgs,
         # Usage limits
         "u_session": usage_limits.get("session", {}).get("pct", "—"),
         "u_week": usage_limits.get("week_all", {}).get("pct", "—"),
@@ -1155,8 +1170,8 @@ def _test_payload():
         "spark": "\u2581\u2583\u2585\u2587\u2584\u2586\u2588\u2585",
         "streak": 7,
         "top_project": "trmnl-claude",
-        "o_tokens": "",
-        "o_messages": "",
+        "o_tokens": "0",
+        "o_messages": 0,
         "updated": "Apr 4, 11:22",
         "m1_name": "Opus",
         "m1_tokens": "18.2M",

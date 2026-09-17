@@ -23,7 +23,7 @@ Reads local Claude Code session data and pulls live usage limits from the API's 
 | **Usage streak** | Consecutive days of Claude Code usage |
 | **Trend indicator** | Up/down/flat vs yesterday |
 
-The payload also carries `top_project` (most active project by tokens) and a per-model cost `m1_cost`, `m2_cost`, `m3_cost`. None of the four shipped templates render those. They are there for a template of your own.
+The payload also carries `top_project` (most active project by tokens), a per-model cost `m1_cost`, `m2_cost`, `m3_cost`, and `o_tokens` / `o_messages` (today's usage from models that aren't Anthropic's, see below). None of the four shipped templates render those. They are there for a template of your own.
 
 ## How it works
 
@@ -149,7 +149,23 @@ Claude Code writes one JSONL line per content block, and every line repeats the 
 
 Days are local, not UTC, so "today" ends when your clock says it does.
 
-Costs are what the same tokens would have cost at API list prices. A subscription doesn't charge per token, so treat the figure as a comparison rather than a bill. Cache writes cost 1.25x input at the 5-minute TTL and 2x at the 1-hour one, and each message records which it used. Models the script doesn't recognize, one proxied through a gateway for instance, fall back to Sonnet 4.6 rates.
+Costs are what the same tokens would have cost at API list prices. A subscription doesn't charge per token, so treat the figure as a comparison rather than a bill. Cache writes cost 1.25x input at the 5-minute TTL and 2x at the 1-hour one, and each message records which it used.
+
+### Models that aren't Anthropic's
+
+If you route another vendor's model through Claude Code, via a gateway that speaks the Anthropic API, its transcripts land in the same JSONL files. By default the script leaves those entries out of every figure: no tokens, no cost, no message or session count, no model or project row.
+
+The reason is that two of the numbers on the display only make sense for Anthropic models. The cost comes off Anthropic's price list, and the session, week and per-model bars come from Anthropic's rate-limit headers. A GPT or Qwen reply is priced by neither and counted against neither. Folding its tokens in invents a dollar figure for it and leaves the totals describing a different population than the bars sitting next to them. On the fleet this was written for, that had put $264 of a $724 week on the display for models that cost nothing against the subscription, and the model slots read Gpt, Opus, Qwen3.8 while the per-model bar beside them warned Fable was at 95%.
+
+Detection is by name. A model id naming one of the families `fable`, `opus`, `sonnet` or `haiku` counts, whatever else the id says. Failing that, an id naming a known other vendor (`gpt`, `qwen`, `llama`, `gemini`, `mistral`, `deepseek`, `grok`, `kimi`, `glm`, `command-r`, `phi`) is excluded. Anything else that starts with `claude` counts, priced at Sonnet 4.6 rates, so an Anthropic family newer than this file shows up under an unfamiliar name rather than vanishing. The `claude-` prefix alone proves nothing, because a gateway can hand back ids like `claude-gpt-6-astra`.
+
+That leaves one gap. A new Anthropic family whose id does not start with `claude` and does not contain one of the four family names would be dropped until someone adds it to `_ANTHROPIC_FAMILIES`. A model from a vendor missing from the list, and not prefixed `claude`, is also dropped, which is the right outcome by accident.
+
+`--include-other-models` restores the old behaviour, counting everything at Sonnet 4.6 rates where the price table has no entry. If your gateway bills you per token and you want the display to reflect that spend, or you want the totals to mean "everything Claude Code did today" regardless of the bars, use it. In a fleet, pass it on every host: each host filters when it scans, so the master's flag only affects the master's own tokens and the model slots.
+
+What was excluded is tallied rather than discarded. Two merge variables, `o_tokens` and `o_messages`, carry today's excluded tokens and message count, blank when there were none. No shipped template renders them, but a template of your own can.
+
+If you upgrade with a gateway in use, expect the numbers to drop the first time the new version posts. Week totals, cost, the sparkline and the model breakdown all shrink to Anthropic-only usage. That is the fix working, not data loss.
 
 ### Reading the usage limits
 
@@ -382,6 +398,8 @@ When the master returns, its next run pulls every store, takes the newest entry 
 
 The other direction works the same way. A secondary that was off for a day comes back, its timer runs, the master's next pull picks up its fresh scan, and the marker goes from `2/3` back to `3/3`.
 
+Retiring a machine is a config edit. Remove it from `hosts` in `fleet.json` everywhere and it stops contributing on the next post. Only hosts the config lists go into the payload, so an entry left behind in the store neither holds its tokens in the weekly total nor pushes the marker past the host count.
+
 ### A Mac in the fleet
 
 macOS keeps Claude's credentials in the Keychain rather than in `~/.claude/.credentials.json`. A Mac therefore can't read the plan name, and can't read the OAuth token the rate-limit headers need. It counts its own tokens normally and borrows the rest. The plan comes from whichever host most recently read one. The usage percentages ride along in the store's `limits` entry, cached by whoever last fetched them and dropped once they are older than `stale_after_min`. Past that the bars go blank on purpose, because a percentage that outlived its reset is worse than none.
@@ -428,6 +446,7 @@ Keep the timer running on every machine. The master's ssh pull runs a scan on th
 | `--usage-method {auto,headers,pty}` | `auto` | How to read the usage limits, see above |
 | `--model-limit-ttl MIN` | 60, or 15 above 80% | How stale the per-model row may get before `auto` re-scrapes it |
 | `--debounce MIN` | 0 | Exit at once if the last post was under MIN minutes ago |
+| `--include-other-models` | | Count models that aren't Anthropic's in the totals, cost and model breakdown, at Sonnet 4.6 rates where the price table has no entry |
 | `--fleet-config PATH` | `$TRMNL_FLEET_CONFIG`, else `fleet.json` beside the script | Where the fleet config lives |
 | `--no-fleet` | | Ignore the fleet config and post this host alone |
 | `--emit-store` | | Refresh this host's entry in the fleet store, print the store as JSON, exit |
