@@ -1,10 +1,12 @@
 {
   "_comment": [
-    "Copy to fleet.json on every machine that shares the display, identical on each.",
+    "Copy to fleet.json beside the script on every machine that shares the display, identical on each.",
     "Without this file the script posts its own stats alone, exactly as a single-machine install does.",
-    "'name' must match `hostname -s`. Give every host an 'ssh' target, the master included:",
-    "whoever posts collects from the others, and during an outage that isn't the master.",
-    "'cmd' defaults to ~/trmnl-claude/run.sh.",
+    "'name' must match `hostname -s`, and the master must be listed in 'hosts' too.",
+    "Give every host an 'ssh' target, the master included. Whoever posts collects from the others,",
+    "and during an outage that isn't the master. ssh runs with BatchMode=yes, so keys must work unprompted.",
+    "'cmd' is what ssh runs on that host; it defaults to ~/trmnl-claude/run.sh.",
+    "The three timing keys are optional. The values below are the defaults, in minutes.",
     "takeover_after_min: how long the master may go quiet before the first successor posts.",
     "successor_stagger_min: how much longer each successor behind it waits for its turn.",
     "stale_after_min: how old a host's numbers may get before it stops counting as reporting."
