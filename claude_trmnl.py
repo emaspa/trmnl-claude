@@ -658,9 +658,18 @@ def _parse_usage_output(raw):
 # store the master pushes, so a secondary decides whether to take over by
 # reading a local file. That matters: the master can ssh out, and the reverse
 # direction is usually not set up.
+#
+# Past two machines, "a secondary takes over" isn't enough: every secondary
+# sees the same stale heartbeat at the same moment and they all post, which is
+# the flipping display again. So secondaries queue. The store records when each
+# host first appeared, and succession follows that join order, each successor
+# waiting one stagger interval longer than the one ahead of it. If the first
+# successor is down too, it simply never posts, the heartbeat keeps ageing, and
+# the next one's turn arrives on its own.
 
 FLEET_STORE_NAME = ".trmnl_fleet.json"
-_FLEET_DEFAULTS = {"takeover_after_min": 45, "stale_after_min": 60}
+_FLEET_DEFAULTS = {"takeover_after_min": 45, "stale_after_min": 60,
+                   "successor_stagger_min": 15}
 _FLEET_REMOTE_CMD = "~/trmnl-claude/run.sh"
 _FLEET_SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=8"]
 _FLEET_TIMEOUT = 120
@@ -778,7 +787,35 @@ def _load_store():
         s["hosts"] = {}
     if not isinstance(s.get("last_post"), dict):
         s["last_post"] = {}
+    if not isinstance(s.get("members"), dict):
+        s["members"] = {}
     return s
+
+
+def _ensure_member(store, host, now):
+    """Record when a host first joined. Succession follows this order."""
+    if host not in store["members"]:
+        store["members"][host] = {"joined": now}
+
+
+def _successor_rank(cfg, store, me):
+    """Where this host sits in the queue behind the master.
+
+    Rank 0 takes over first. Oldest member wins, with the name as a tiebreak so
+    two hosts that joined in the same second still queue deterministically. A
+    host the config doesn't list goes last.
+    """
+    queue = [h["name"] for h in cfg["hosts"] if h["name"] != cfg["master"]]
+    members = store.get("members") or {}
+
+    def joined(name):
+        try:
+            return float(members[name]["joined"])
+        except (KeyError, TypeError, ValueError):
+            return float("inf")   # never seen: behind everyone who has
+
+    queue.sort(key=lambda n: (joined(n), n))
+    return queue.index(me) if me in queue else len(queue)
 
 
 def _save_store(store):
@@ -801,6 +838,18 @@ def _merge_stores(into, other):
         cur = into["hosts"].get(host)
         if not cur or float(agg.get("ts", 0)) > float(cur.get("ts", 0)):
             into["hosts"][host] = agg
+    # Join times settle the other way round: the earliest sighting is the true
+    # one, so a host that rebuilt its store can't jump the queue.
+    for host, info in (other.get("members") or {}).items():
+        if not isinstance(info, dict) or "joined" not in info:
+            continue
+        cur = into["members"].get(host)
+        try:
+            if not cur or float(info["joined"]) < float(cur["joined"]):
+                into["members"][host] = info
+        except (KeyError, TypeError, ValueError):
+            into["members"][host] = info
+
     theirs = other.get("last_post") or {}
     if float(theirs.get("ts", 0)) > float(into["last_post"].get("ts", 0)):
         into["last_post"] = theirs
@@ -1117,7 +1166,9 @@ def main():
         since = (datetime.now().astimezone().replace(
             hour=0, minute=0, second=0, microsecond=0) - timedelta(days=7))
         store = _load_store()
-        store["hosts"][_this_host()] = _aggregate_local(cd, since)
+        me = _this_host()
+        _ensure_member(store, me, datetime.now(timezone.utc).timestamp())
+        store["hosts"][me] = _aggregate_local(cd, since)
         _save_store(store)
         print(json.dumps(store))
         return
@@ -1167,20 +1218,37 @@ def _run_fleet(args, cfg):
     # Own entry is always a fresh scan; whatever the store held for this host
     # is superseded, which is what keeps a takeover from counting us twice.
     store = _load_store()
+    _ensure_member(store, me, now)
     store["hosts"][me] = _aggregate_local(cd, since)
 
-    if is_master:
-        for h in others:
-            got = _pull_store(h)
-            if got:
-                _merge_stores(store, got)
-    else:
-        quiet_for = now - float(store["last_post"].get("ts", 0) or 0)
-        if quiet_for <= cfg["takeover_after_min"] * 60:
-            # Master is posting for all of us. Keep the fresh scan so it has
-            # something current to collect, and stay off the display.
+    def master_quiet_for():
+        return now - float(store["last_post"].get("ts", 0) or 0)
+
+    if not is_master:
+        rank = _successor_rank(cfg, store, me)
+        wait_min = (cfg["takeover_after_min"]
+                    + rank * cfg["successor_stagger_min"])
+        if master_quiet_for() <= wait_min * 60:
+            # Either the master is posting for all of us, or a successor ahead
+            # in the queue gets first refusal. Keep the fresh scan so whoever
+            # does post has something current to collect, and stay off the
+            # display.
             _save_store(store)
             return
+
+    # Whoever is about to post collects first, so the display carries the
+    # freshest numbers every reachable host can give, not the poster's own
+    # beside a set of cached ones.
+    for h in others:
+        got = _pull_store(h)
+        if got:
+            _merge_stores(store, got)
+
+    # Collecting can reveal that the master, or a successor further up the
+    # queue, has posted in the meantime. Yield instead of posting over them.
+    if not is_master and master_quiet_for() <= cfg["takeover_after_min"] * 60:
+        _save_store(store)
+        return
 
     payload = build_payload(
         usage_method="off" if args.no_scrape else args.usage_method,

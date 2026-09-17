@@ -154,21 +154,37 @@ TRMNL keeps the last payload it received. Two machines each posting their own nu
 {
   "master": "workstation",
   "takeover_after_min": 45,
+  "successor_stagger_min": 15,
   "stale_after_min": 60,
   "hosts": [
-    { "name": "workstation" },
-    { "name": "laptop", "ssh": "laptop.local", "cmd": "~/trmnl-claude/run.sh" }
+    { "name": "workstation", "ssh": "workstation.local" },
+    { "name": "laptop", "ssh": "laptop.local" },
+    { "name": "mac-mini", "ssh": "mac-mini.local", "cmd": "~/trmnl-claude/run.sh" }
   ]
 }
 ```
 
 `name` has to match `hostname -s`. Without the file nothing changes, and the script posts its own stats the way a single-machine install always has.
 
-The master does the collecting. Each run it scans its own `~/.claude`, runs `ssh <host> run.sh --emit-store` against the others, merges what comes back and posts the sum. Secondaries scan themselves, leave the result where the master can pick it up, and stay off the display. Only one ssh direction needs to work, master to secondary, with key auth. Nothing connects back the other way.
+The master does the collecting. Each run it scans its own `~/.claude`, runs `ssh <host> run.sh --emit-store` against the others, merges what comes back and posts the sum. Secondaries scan themselves, leave the result where the master can pick it up, and stay off the display.
+
+Two machines only need one ssh direction, master to secondary. Three or more want every host able to reach every other, which is why the example gives the master an `ssh` target too. Whoever posts collects first, and during an outage that isn't the master.
 
 Hosts trade per-day, per-model and per-project aggregates rather than finished figures. A streak, a sparkline and a top project can't be reconstructed from two rendered totals. Session ids union rather than add, so a session spanning two machines counts once.
 
 If the master goes down, a secondary posts in its place. The master pushes the merged store to every host after each post, and that file carries the time of the last post, so a secondary decides by reading a local file rather than probing a machine that may be off. Once that timestamp is older than `takeover_after_min`, it posts its own fresh scan next to the last figures it holds for everyone else. The store is keyed by host, so it replaces its own entry and leaves the others untouched, which is what stops a takeover counting itself twice. When the master returns it collects those stores, keeps the newest entry per host, and carries on.
+
+Past two machines that isn't enough on its own. Every secondary would see the same stale heartbeat in the same minute and all of them would post, which is the flipping display again with extra steps. So secondaries queue, in the order they first appeared in the store:
+
+| Master silent for | Who posts |
+|---|---|
+| 45 min | first successor |
+| 60 min | second, if the first didn't |
+| 75 min | third, if neither did |
+
+Join order comes from the store rather than the config, so reordering `hosts` changes nothing and a machine can't jump the queue by rebuilding its store. Hosts that joined in the same second fall back to alphabetical order, which at least resolves the same way on every machine. A successor that is itself down simply never posts, the heartbeat keeps ageing, and the next one's turn arrives without anyone coordinating it.
+
+Before posting, a successor collects from whoever it can reach, and stands down if that reveals someone ahead of it already posted. That check is the reason peer-to-peer ssh is worth setting up: without it, two successors that can't see each other will both post. The display still shows fleet totals either way, since each posts the full merged picture, but they'll disagree about whose numbers are freshest.
 
 The title bar shows how many hosts reported, `2/2`. A host whose numbers are older than `stale_after_min` stops counting as present and no longer contributes active sessions, though the tokens it already reported still count toward the week. Watch that marker. A machine that quietly stops reporting looks exactly like a quiet day otherwise, which is the failure this whole arrangement exists to prevent.
 

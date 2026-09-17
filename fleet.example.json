@@ -2,16 +2,20 @@
   "_comment": [
     "Copy to fleet.json on every machine that shares the display, identical on each.",
     "Without this file the script posts its own stats alone, exactly as a single-machine install does.",
-    "'name' must match `hostname -s`. 'ssh' is how the master reaches that host;",
-    "the master's own entry needs none. 'cmd' defaults to ~/trmnl-claude/run.sh.",
-    "takeover_after_min: how long the master may go quiet before a secondary posts instead.",
+    "'name' must match `hostname -s`. Give every host an 'ssh' target, the master included:",
+    "whoever posts collects from the others, and during an outage that isn't the master.",
+    "'cmd' defaults to ~/trmnl-claude/run.sh.",
+    "takeover_after_min: how long the master may go quiet before the first successor posts.",
+    "successor_stagger_min: how much longer each successor behind it waits for its turn.",
     "stale_after_min: how old a host's numbers may get before it stops counting as reporting."
   ],
   "master": "workstation",
   "takeover_after_min": 45,
+  "successor_stagger_min": 15,
   "stale_after_min": 60,
   "hosts": [
-    { "name": "workstation" },
-    { "name": "laptop", "ssh": "laptop.local", "cmd": "~/trmnl-claude/run.sh" }
+    { "name": "workstation", "ssh": "workstation.local" },
+    { "name": "laptop", "ssh": "laptop.local" },
+    { "name": "mac-mini", "ssh": "mac-mini.local", "cmd": "~/trmnl-claude/run.sh" }
   ]
 }
