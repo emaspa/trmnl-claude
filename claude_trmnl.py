@@ -368,28 +368,37 @@ def _process_jsonl(path, since, daily, models, projects, proj, seen,
 
 # ── Sparkline & streak ───────────────────────────────────────────────
 
-def _day_total(daily, key):
+def _day_total(daily, key, with_other=False):
+    """A day's tokens. with_other adds back what the model filter left out.
+
+    The sparkline and the streak answer "was there work that day", which a day
+    spent on a model reached through a gateway plainly was. The cost and the
+    limit bars are Anthropic-specific and stay filtered, so these two are the
+    only places the wider count belongs.
+    """
     d = daily.get(key, {})
-    return d.get("input", 0) + d.get("output", 0) + d.get("cache_read", 0) + d.get("cache_write", 0)
+    total = (d.get("input", 0) + d.get("output", 0)
+             + d.get("cache_read", 0) + d.get("cache_write", 0))
+    return total + d.get("other_tokens", 0) if with_other else total
 
 
-def _sparkline(daily, days=7):
+def _sparkline(daily, days=7, with_other=False):
     blocks = " \u2581\u2582\u2583\u2584\u2585\u2586\u2587\u2588"
     today = datetime.now().date()
-    vals = [_day_total(daily, (today - timedelta(days=i)).strftime("%Y-%m-%d"))
+    vals = [_day_total(daily, (today - timedelta(days=i)).strftime("%Y-%m-%d"), with_other)
             for i in range(days - 1, -1, -1)]
     mx = max(vals) if any(vals) else 1
     return "".join(blocks[min(8, int(v / mx * 8))] for v in vals)
 
 
-def _streak(daily):
+def _streak(daily, with_other=False):
     today = datetime.now().date()
     s = 0
     d = today
     # If no usage today yet, start counting from yesterday (handles timezone offsets)
-    if _day_total(daily, d.strftime("%Y-%m-%d")) == 0:
+    if _day_total(daily, d.strftime("%Y-%m-%d"), with_other) == 0:
         d -= timedelta(days=1)
-    while _day_total(daily, d.strftime("%Y-%m-%d")) > 0:
+    while _day_total(daily, d.strftime("%Y-%m-%d"), with_other) > 0:
         s += 1
         d -= timedelta(days=1)
     return s
@@ -1007,7 +1016,8 @@ def _push_store(host, store):
 
 def build_payload(usage_method="auto", model_ttl_min=None,
                   aggregates=None, stale_cut=None, hosts_total=0,
-                  usage_limits=None, include_other=False):
+                  usage_limits=None, include_other=False,
+                  strict_activity=False):
     cd = _find_claude_dir()
     # Day boundaries follow the local clock, so "today" means the same thing
     # here as it does on the wall and in the usage reset times below.
@@ -1101,8 +1111,12 @@ def build_payload(usage_method="auto", model_ttl_min=None,
         "w_sessions": w_sess,
         "w_messages": w_msgs,
         # Sparkline & streak
-        "spark": _sparkline(daily),
-        "streak": _streak(daily),
+        # Activity, not spend: these count a day's work whoever served it,
+        # unless --strict-activity says otherwise. The trend arrow above is
+        # deliberately not in this group, since it describes the Today total
+        # sitting beside it and has to count the same population.
+        "spark": _sparkline(daily, with_other=not strict_activity),
+        "streak": _streak(daily, with_other=not strict_activity),
         # Top project
         "top_project": max(projects, key=lambda k: projects[k]["tokens"]) if projects else "—",
         # Tokens today from models left out of everything above, so the work is
@@ -1288,6 +1302,11 @@ def main():
                              "totals, cost and model breakdown. They are left "
                              "out by default: no entry in the price table, and "
                              "no bearing on the usage limits shown beside them")
+    parser.add_argument("--strict-activity", action="store_true",
+                        help="Count only Anthropic models in the streak and "
+                             "sparkline. By default those two count a day's "
+                             "work whoever served it, since they say whether "
+                             "you worked rather than what it cost")
     parser.add_argument("--no-fleet", action="store_true",
                         help="Ignore the fleet config and post this host alone")
     parser.add_argument("--emit-store", action="store_true",
@@ -1335,7 +1354,8 @@ def main():
         payload = build_payload(
             usage_method="off" if args.no_scrape else args.usage_method,
             model_ttl_min=args.model_limit_ttl,
-            include_other=args.include_other_models)
+            include_other=args.include_other_models,
+            strict_activity=args.strict_activity)
         post_and_exit(payload, args)
         return
 
@@ -1456,7 +1476,8 @@ def _run_fleet(args, cfg):
         stale_cut=now - cfg["stale_after_min"] * 60,
         hosts_total=len(cfg["hosts"]),
         usage_limits=limits,
-        include_other=args.include_other_models)
+        include_other=args.include_other_models,
+        strict_activity=args.strict_activity)
 
     if args.dry_run:
         print(json.dumps(payload, indent=2, default=str))
