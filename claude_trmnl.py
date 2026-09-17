@@ -34,9 +34,21 @@ PRICING = {
     "claude-sonnet-4-6": {"input": 3.0,  "output": 15.0, "cache_read": 0.30},
     "claude-haiku-4-5":  {"input": 1.0,  "output": 5.0,  "cache_read": 0.10},
 }
-# Fallback for models this table doesn't know (e.g. one proxied through a
-# gateway). Sonnet-4.6 rates, so the cost line stays an estimate, not a gap.
+# Fallback for models this table doesn't know. Sonnet-4.6 rates, so the cost
+# line stays an estimate rather than a gap. By default this only applies to an
+# Anthropic model newer than this table, since anything else is left out of the
+# figures entirely (see _is_anthropic).
 _DEFAULT_PRICE = {"input": 3.0, "output": 15.0, "cache_read": 0.30}
+
+# Anthropic families. A model naming one of these is Anthropic's whatever else
+# the id says.
+_ANTHROPIC_FAMILIES = ("fable", "opus", "sonnet", "haiku")
+
+# Vendors that turn up proxied through a gateway. They matter because such a
+# gateway may hand back an id like "claude-gpt-6-astra": the "claude-" prefix
+# proves nothing on its own, so the vendor name has to be checked for.
+_FOREIGN_VENDORS = ("gpt", "qwen", "llama", "gemini", "mistral", "deepseek",
+                    "grok", "kimi", "glm", "command-r", "phi")
 
 CACHE_WRITE_MULT = {"5m": 1.25, "1h": 2.0}
 
@@ -96,6 +108,28 @@ def _model_display(key):
     # prefix such ids often carry so a non-Claude model isn't labelled "Claude".
     parts = [p for p in key.split("-") if p and p != "claude"]
     return parts[0].title()[:10] if parts else key[:10]
+
+
+def _is_anthropic(key):
+    """Whether this model's usage belongs in the figures on the display.
+
+    Two of the numbers shown are Anthropic-specific: the cost is priced off
+    Anthropic's list, and the session/week/per-model bars come from Anthropic's
+    rate-limit headers. A model reached through a gateway is neither priced by
+    that table nor counted against those limits, so folding its tokens into the
+    same totals invents a dollar figure and makes the totals describe a
+    different population than the bars beside them.
+    """
+    n = (key or "").lower()
+    if any(f in n for f in _ANTHROPIC_FAMILIES):
+        return True
+    if any(v in n for v in _FOREIGN_VENDORS):
+        return False
+    # An unfamiliar "claude-…" is most likely a family this version predates.
+    # Counting it is the safer mistake: dropping real usage is worse than
+    # carrying a little that shouldn't be there, and it shows up as a model
+    # name nobody recognises rather than vanishing.
+    return n.startswith("claude")
 
 
 def _calc_cost(mk, inp, out, cw5m, cw1h, cr):
@@ -187,11 +221,14 @@ def _pid_alive(pid):
         return False
 
 
-def _scan_usage(claude_dir, since):
+def _scan_usage(claude_dir, since, include_other=False):
     """Scan session JSONL files for token usage since a given datetime."""
     daily = defaultdict(lambda: {
         "input": 0, "output": 0, "cache_read": 0, "cache_write": 0,
         "cost": 0.0, "messages": 0, "sessions": set(),
+        # What was left out, so the excluded work is reportable rather than
+        # merely absent. Zero when include_other folds it into the rest.
+        "other_tokens": 0, "other_messages": 0,
     })
     models = defaultdict(lambda: {"tokens": 0, "messages": 0, "cost": 0.0})
     projects = defaultdict(lambda: {"tokens": 0, "messages": 0})
@@ -211,7 +248,8 @@ def _scan_usage(claude_dir, since):
                         continue
                 except OSError:
                     continue
-                _process_jsonl(jf, since, daily, models, projects, proj, seen)
+                _process_jsonl(jf, since, daily, models, projects, proj, seen,
+                               include_other)
 
     return daily, models, projects
 
@@ -233,7 +271,8 @@ def _entry_id(entry, msg):
     return (mid, entry.get("requestId"))
 
 
-def _process_jsonl(path, since, daily, models, projects, proj, seen):
+def _process_jsonl(path, since, daily, models, projects, proj, seen,
+                   include_other=False):
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -281,6 +320,17 @@ def _process_jsonl(path, since, daily, models, projects, proj, seen):
                 total = inp + out + cr + cw
                 cost = _calc_cost(mk, inp, out, cw5m, cw1h, cr)
                 dk = ts.astimezone().strftime("%Y-%m-%d")
+
+                # A model that isn't Anthropic's has no price in the table and
+                # never counted against the limits on the display, so it is
+                # tallied on its own rather than folded into figures it would
+                # misstate. The session id is left out too, so the session
+                # count keeps describing the tokens shown next to it.
+                if not include_other and not _is_anthropic(mk):
+                    o = daily[dk]
+                    o["other_tokens"] += total
+                    o["other_messages"] += 1
+                    continue
 
                 d = daily[dk]
                 d["input"] += inp
@@ -712,13 +762,13 @@ def _load_fleet_config(explicit=None):
     return out
 
 
-def _aggregate_local(claude_dir, since):
+def _aggregate_local(claude_dir, since, include_other=False):
     """This machine's contribution, in the shape hosts exchange.
 
     Sets aren't JSON, so session ids travel as a sorted list and become a set
     again on merge.
     """
-    daily, models, projects = _scan_usage(claude_dir, since)
+    daily, models, projects = _scan_usage(claude_dir, since, include_other)
     sub, tier = _read_credentials(claude_dir)
     return {
         "host": _this_host(),
@@ -746,6 +796,7 @@ def _merge_aggregates(aggs, stale_cut=None):
     daily = defaultdict(lambda: {
         "input": 0, "output": 0, "cache_read": 0, "cache_write": 0,
         "cost": 0.0, "messages": 0, "sessions": set(),
+        "other_tokens": 0, "other_messages": 0,
     })
     models = defaultdict(lambda: {"tokens": 0, "messages": 0, "cost": 0.0})
     projects = defaultdict(lambda: {"tokens": 0, "messages": 0})
@@ -769,7 +820,8 @@ def _merge_aggregates(aggs, stale_cut=None):
             active += a.get("active", 0) or 0
         for dk, dd in (a.get("daily") or {}).items():
             d = daily[dk]
-            for f in ("input", "output", "cache_read", "cache_write", "messages"):
+            for f in ("input", "output", "cache_read", "cache_write", "messages",
+                      "other_tokens", "other_messages"):
                 d[f] += dd.get(f, 0) or 0
             d["cost"] += dd.get("cost", 0.0) or 0.0
             d["sessions"] |= set(dd.get("sessions") or ())
@@ -914,7 +966,7 @@ def _push_store(host, store):
 
 def build_payload(usage_method="auto", model_ttl_min=None,
                   aggregates=None, stale_cut=None, hosts_total=0,
-                  usage_limits=None):
+                  usage_limits=None, include_other=False):
     cd = _find_claude_dir()
     # Day boundaries follow the local clock, so "today" means the same thing
     # here as it does on the wall and in the usage reset times below.
@@ -924,7 +976,7 @@ def build_payload(usage_method="auto", model_ttl_min=None,
 
     sub_type, tier = _read_credentials(cd)
     if aggregates is None:
-        aggregates = [_aggregate_local(cd, since=seven_ago)]
+        aggregates = [_aggregate_local(cd, since=seven_ago, include_other=include_other)]
     (daily, models, projects, active, fresh,
      fleet_sub, fleet_tier) = _merge_aggregates(aggregates, stale_cut)
     if sub_type == "Unknown" and fleet_sub:
@@ -943,6 +995,8 @@ def build_payload(usage_method="auto", model_ttl_min=None,
     t_total = t_in + t_out + t_cr + t_cw
     t_cost = td.get("cost", 0.0)
     t_msgs = td.get("messages", 0)
+    t_other = td.get("other_tokens", 0)
+    t_other_msgs = td.get("other_messages", 0)
     t_sess = len(td.get("sessions", set()))
 
     # Yesterday (trend)
@@ -971,6 +1025,8 @@ def build_payload(usage_method="auto", model_ttl_min=None,
     w_sess = len(w_sessions)
 
     # Model breakdown (sorted by tokens desc)
+    if not include_other:
+        models = {k: v for k, v in models.items() if _is_anthropic(k)}
     models_sorted = sorted(models.items(), key=lambda x: x[1]["tokens"], reverse=True)
     total_model_tokens = sum(m["tokens"] for _, m in models_sorted)
 
@@ -1008,6 +1064,12 @@ def build_payload(usage_method="auto", model_ttl_min=None,
         "streak": _streak(daily),
         # Top project
         "top_project": max(projects, key=lambda k: projects[k]["tokens"]) if projects else "—",
+        # Tokens today from models left out of everything above, so the work is
+        # reportable rather than merely missing. Blank when there were none, or
+        # when --include-other-models folded them into the figures instead. No
+        # shipped template renders these.
+        "o_tokens": fmt_tokens(t_other) if t_other else "",
+        "o_messages": t_other_msgs if t_other else "",
         # Usage limits
         "u_session": usage_limits.get("session", {}).get("pct", "—"),
         "u_week": usage_limits.get("week_all", {}).get("pct", "—"),
@@ -1093,6 +1155,8 @@ def _test_payload():
         "spark": "\u2581\u2583\u2585\u2587\u2584\u2586\u2588\u2585",
         "streak": 7,
         "top_project": "trmnl-claude",
+        "o_tokens": "",
+        "o_messages": "",
         "updated": "Apr 4, 11:22",
         "m1_name": "Opus",
         "m1_tokens": "18.2M",
@@ -1162,7 +1226,8 @@ def main():
     parser.add_argument("--test", action="store_true",
                         help="Use sample multi-model data for layout preview")
     parser.add_argument("--no-scrape", action="store_true",
-                        help="Skip the usage limits entirely (local token data only)")
+                        help="Don't read the usage limits on this host (a fleet "
+                             "host still shows ones cached in its store)")
     parser.add_argument("--usage-method", choices=["auto", "headers", "pty"],
                         default="auto",
                         help="How to read usage limits: 'headers' asks the API "
@@ -1175,16 +1240,23 @@ def main():
     parser.add_argument("--debounce", type=int, metavar="MIN", default=0,
                         help="Skip if last push was less than MIN minutes ago")
     parser.add_argument("--fleet-config", metavar="PATH", default=None,
-                        help="Fleet config file (default: fleet.json beside "
-                             "this script, or $TRMNL_FLEET_CONFIG)")
+                        help="Fleet config file (default: $TRMNL_FLEET_CONFIG, "
+                             "else fleet.json beside this script)")
+    parser.add_argument("--include-other-models", action="store_true",
+                        help="Count models that aren't Anthropic's in the "
+                             "totals, cost and model breakdown. They are left "
+                             "out by default: no entry in the price table, and "
+                             "no bearing on the usage limits shown beside them")
     parser.add_argument("--no-fleet", action="store_true",
                         help="Ignore the fleet config and post this host alone")
     parser.add_argument("--emit-store", action="store_true",
-                        help="Print this host's fleet store as JSON and exit "
-                             "(how the master collects; prints nothing else)")
+                        help="Refresh this host's entry, print the fleet store "
+                             "as JSON and exit (what the posting host runs over "
+                             "ssh to collect; prints nothing else)")
     parser.add_argument("--ingest-store", action="store_true",
-                        help="Merge a fleet store read from stdin and exit "
-                             "(how the master pushes results back out)")
+                        help="Merge a fleet store read from stdin into the local "
+                             "one and exit (how the posting host pushes the "
+                             "merged store back out)")
     args = parser.parse_args()
 
     # Fleet plumbing. Neither posts, and --emit-store skips the usage limits
@@ -1197,7 +1269,7 @@ def main():
         store = _load_store()
         me = _this_host()
         _ensure_member(store, me, datetime.now(timezone.utc).timestamp())
-        store["hosts"][me] = _aggregate_local(cd, since)
+        store["hosts"][me] = _aggregate_local(cd, since, args.include_other_models)
         _save_store(store)
         print(json.dumps(store))
         return
@@ -1221,7 +1293,8 @@ def main():
     if cfg is None:
         payload = build_payload(
             usage_method="off" if args.no_scrape else args.usage_method,
-            model_ttl_min=args.model_limit_ttl)
+            model_ttl_min=args.model_limit_ttl,
+            include_other=args.include_other_models)
         post_and_exit(payload, args)
         return
 
@@ -1248,7 +1321,7 @@ def _run_fleet(args, cfg):
     # is superseded, which is what keeps a takeover from counting us twice.
     store = _load_store()
     _ensure_member(store, me, now)
-    store["hosts"][me] = _aggregate_local(cd, since)
+    store["hosts"][me] = _aggregate_local(cd, since, args.include_other_models)
 
     def master_quiet_for():
         return now - float(store["last_post"].get("ts", 0) or 0)
@@ -1297,10 +1370,15 @@ def _run_fleet(args, cfg):
     payload = build_payload(
         usage_method="off" if args.no_scrape else args.usage_method,
         model_ttl_min=args.model_limit_ttl,
-        aggregates=list(store["hosts"].values()),
+        # Configured hosts only. A machine dropped from the config still has an
+        # entry in everyone's store, and counting it would keep its tokens in
+        # the weekly total indefinitely and push the marker past the host count.
+        aggregates=[a for n, a in store["hosts"].items()
+                    if any(h["name"] == n for h in cfg["hosts"])],
         stale_cut=now - cfg["stale_after_min"] * 60,
         hosts_total=len(cfg["hosts"]),
-        usage_limits=limits)
+        usage_limits=limits,
+        include_other=args.include_other_models)
 
     if args.dry_run:
         print(json.dumps(payload, indent=2, default=str))
