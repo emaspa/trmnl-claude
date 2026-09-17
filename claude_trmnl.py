@@ -867,6 +867,16 @@ def _merge_stores(into, other):
     theirs = other.get("last_post") or {}
     if float(theirs.get("ts", 0)) > float(into["last_post"].get("ts", 0)):
         into["last_post"] = theirs
+
+    # The cached limits travel with the store, which is the only way a host
+    # that can't read them itself ever gets any.
+    mine = into.get("limits") or {}
+    yours = other.get("limits") or {}
+    try:
+        if float(yours.get("ts", 0)) > float(mine.get("ts", 0)):
+            into["limits"] = yours
+    except (TypeError, ValueError):
+        pass
     return into
 
 
