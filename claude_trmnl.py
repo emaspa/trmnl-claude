@@ -1154,6 +1154,12 @@ def _run_fleet(args, cfg):
     others = [h for h in cfg["hosts"] if h["name"] != me]
     now = datetime.now(timezone.utc).timestamp()
 
+    # Copying the example config without editing it leaves every name wrong,
+    # and the symptom is a host counted as absent forever. Say so out loud.
+    if len(others) == len(cfg["hosts"]):
+        print(f"Warning: this host is '{me}', which the fleet config doesn't "
+              f"list. Names must match `hostname -s`.", file=sys.stderr)
+
     cd = _find_claude_dir()
     since = (datetime.now().astimezone().replace(
         hour=0, minute=0, second=0, microsecond=0) - timedelta(days=7))

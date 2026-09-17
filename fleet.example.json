@@ -7,11 +7,11 @@
     "takeover_after_min: how long the master may go quiet before a secondary posts instead.",
     "stale_after_min: how old a host's numbers may get before it stops counting as reporting."
   ],
-  "master": "desk",
+  "master": "workstation",
   "takeover_after_min": 45,
   "stale_after_min": 60,
   "hosts": [
-    { "name": "desk" },
-    { "name": "openbox", "ssh": "openbox", "cmd": "~/trmnl-claude/run.sh" }
+    { "name": "workstation" },
+    { "name": "laptop", "ssh": "laptop.local", "cmd": "~/trmnl-claude/run.sh" }
   ]
 }

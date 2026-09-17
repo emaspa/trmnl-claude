@@ -152,12 +152,12 @@ TRMNL keeps the last payload it received. Two machines each posting their own nu
 
 ```json
 {
-  "master": "desk",
+  "master": "workstation",
   "takeover_after_min": 45,
   "stale_after_min": 60,
   "hosts": [
-    { "name": "desk" },
-    { "name": "openbox", "ssh": "openbox", "cmd": "~/trmnl-claude/run.sh" }
+    { "name": "workstation" },
+    { "name": "laptop", "ssh": "laptop.local", "cmd": "~/trmnl-claude/run.sh" }
   ]
 }
 ```
