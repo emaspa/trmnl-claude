@@ -8,6 +8,7 @@ to a TRMNL private plugin via webhook. Zero dependencies beyond stdlib.
 
 import json
 import os
+import re
 import sys
 import urllib.request
 import urllib.error
@@ -16,16 +17,26 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # ── Anthropic pricing (API-equivalent $/MTok) ───────────────────────
+#
+# Cache writes aren't listed: they're a multiple of the input price and depend
+# on the TTL the request asked for (see CACHE_WRITE_MULT). Cache reads are
+# 0.1x input everywhere except Fable 5.1, which reads at 0.025x.
 
 PRICING = {
-    "claude-fable-5":    {"input": 10.0,  "output": 50.0, "cache_write": 12.50, "cache_read": 1.00},
-    # Covers all Opus versions (4.5+ share this price; legacy 4.1/4.0/3 were $15/$75)
-    "claude-opus-4-6":   {"input": 5.0,   "output": 25.0, "cache_write": 6.25,  "cache_read": 0.50},
-    # Covers all Sonnet versions incl. Sonnet 5 (same sticker price)
-    "claude-sonnet-4-6": {"input": 3.0,   "output": 15.0, "cache_write": 3.75,  "cache_read": 0.30},
-    "claude-haiku-4-5":  {"input": 1.0,   "output": 5.0,  "cache_write": 1.25,  "cache_read": 0.10},
+    "claude-fable-5-1":  {"input": 10.0, "output": 50.0, "cache_read": 0.25},
+    "claude-fable-5":    {"input": 10.0, "output": 50.0, "cache_read": 1.00},
+    # Covers all Opus versions (4.6+ share this price; legacy 4.1/4.0/3 were $15/$75)
+    "claude-opus-5":     {"input": 5.0,  "output": 25.0, "cache_read": 0.50},
+    # Sonnet 5 cut the sticker price; Sonnet 4.6 and earlier stay at $3/$15.
+    "claude-sonnet-5":   {"input": 2.0,  "output": 10.0, "cache_read": 0.20},
+    "claude-sonnet-4-6": {"input": 3.0,  "output": 15.0, "cache_read": 0.30},
+    "claude-haiku-4-5":  {"input": 1.0,  "output": 5.0,  "cache_read": 0.10},
 }
-_DEFAULT_PRICE = {"input": 3.0, "output": 15.0, "cache_write": 3.75, "cache_read": 0.30}
+# Fallback for models this table doesn't know (e.g. one proxied through a
+# gateway). Sonnet-4.6 rates, so the cost line stays an estimate, not a gap.
+_DEFAULT_PRICE = {"input": 3.0, "output": 15.0, "cache_read": 0.30}
+
+CACHE_WRITE_MULT = {"5m": 1.25, "1h": 2.0}
 
 
 # ── Formatting ───────────────────────────────────────────────────────
@@ -49,13 +60,15 @@ def fmt_cost(c):
 # ── Model helpers ────────────────────────────────────────────────────
 
 def _model_key(name):
+    """Collapse a model id onto a pricing key. Only versions that differ in
+    price get their own key -- the rest fold into their family."""
     n = name.lower()
     if "fable" in n:
-        return "claude-fable-5"
+        return "claude-fable-5-1" if re.search(r"fable-?5[.-]1", n) else "claude-fable-5"
     if "opus" in n:
-        return "claude-opus-4-6"
+        return "claude-opus-5"
     if "sonnet" in n:
-        return "claude-sonnet-4-6"
+        return "claude-sonnet-5" if re.search(r"sonnet-?5(?!\d)", n) else "claude-sonnet-4-6"
     if "haiku" in n:
         return "claude-haiku-4-5"
     # Filter out synthetic/internal model names
@@ -64,19 +77,32 @@ def _model_key(name):
     return name
 
 
+_MODEL_NAMES = {
+    "claude-fable-5-1": "Fable",
+    "claude-fable-5": "Fable",
+    "claude-opus-5": "Opus",
+    "claude-sonnet-5": "Sonnet",
+    "claude-sonnet-4-6": "Sonnet",
+    "claude-haiku-4-5": "Haiku",
+}
+
+
 def _model_display(key):
-    return {
-        "claude-fable-5": "Fable",
-        "claude-opus-4-6": "Opus",
-        "claude-sonnet-4-6": "Sonnet",
-        "claude-haiku-4-5": "Haiku",
-    }.get(key, key.split("-")[0].title() if "-" in key else key[:10])
+    if key in _MODEL_NAMES:
+        return _MODEL_NAMES[key]
+    # Unknown model, most likely proxied through a gateway. Skip the "claude-"
+    # prefix such ids often carry so a non-Claude model isn't labelled "Claude".
+    parts = [p for p in key.split("-") if p and p != "claude"]
+    return parts[0].title()[:10] if parts else key[:10]
 
 
-def _calc_cost(mk, inp, out, cw, cr):
+def _calc_cost(mk, inp, out, cw5m, cw1h, cr):
     p = PRICING.get(mk, _DEFAULT_PRICE)
-    return (inp * p["input"] + out * p["output"]
-            + cw * p["cache_write"] + cr * p["cache_read"]) / 1_000_000
+    return (inp * p["input"]
+            + out * p["output"]
+            + cw5m * p["input"] * CACHE_WRITE_MULT["5m"]
+            + cw1h * p["input"] * CACHE_WRITE_MULT["1h"]
+            + cr * p["cache_read"]) / 1_000_000
 
 
 # ── Project name extraction ─────────────────────────────────────────
@@ -168,6 +194,7 @@ def _scan_usage(claude_dir, since):
     models = defaultdict(lambda: {"tokens": 0, "messages": 0, "cost": 0.0})
     projects = defaultdict(lambda: {"tokens": 0, "messages": 0})
     since_epoch = since.timestamp()
+    seen = set()
 
     for base in [claude_dir / "projects", Path.home() / ".config" / "claude" / "projects"]:
         if not base.exists():
@@ -182,13 +209,29 @@ def _scan_usage(claude_dir, since):
                         continue
                 except OSError:
                     continue
-                _process_jsonl(jf, since, daily, models, projects, proj)
+                _process_jsonl(jf, since, daily, models, projects, proj, seen)
 
     return daily, models, projects
 
 
-def _process_jsonl(path, since, daily, models, projects, proj):
-    session_days = set()
+def _entry_id(entry, msg):
+    """Identity of the API response an entry reports usage for.
+
+    Claude Code writes one JSONL line per content block, and every line repeats
+    the whole message's usage -- so a reply with thinking + text + a tool call
+    lands three times. Sessions that get resumed or forked also copy their
+    history into the new file. Counting lines instead of responses inflates
+    every token, cost and message figure, so fold them by (message id, request
+    id). Entries with no message id can't be folded; key them by line uuid so
+    they're still counted exactly once.
+    """
+    mid = msg.get("id")
+    if not mid:
+        return ("uuid", entry.get("uuid"))
+    return (mid, entry.get("requestId"))
+
+
+def _process_jsonl(path, since, daily, models, projects, proj, seen):
     try:
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             for line in f:
@@ -215,16 +258,27 @@ def _process_jsonl(path, since, daily, models, projects, proj):
                 if not u:
                     continue
 
+                key = _entry_id(entry, msg)
+                if key in seen:
+                    continue
+                seen.add(key)
+
                 inp = u.get("input_tokens", 0)
                 out = u.get("output_tokens", 0)
                 cr = u.get("cache_read_input_tokens", 0)
                 cw = u.get("cache_creation_input_tokens", 0)
+                # Cache writes bill 1.25x input at the 5-minute TTL and 2x at
+                # the 1-hour one. Split them when the breakdown is present;
+                # older entries only carry the total, so assume the cheaper TTL.
+                ttl = u.get("cache_creation") or {}
+                cw1h = ttl.get("ephemeral_1h_input_tokens", 0)
+                cw5m = ttl.get("ephemeral_5m_input_tokens", cw if not ttl else 0)
                 mk = _model_key(msg.get("model", ""))
                 if mk is None:
                     continue
                 total = inp + out + cr + cw
-                cost = _calc_cost(mk, inp, out, cw, cr)
-                dk = ts.strftime("%Y-%m-%d")
+                cost = _calc_cost(mk, inp, out, cw5m, cw1h, cr)
+                dk = ts.astimezone().strftime("%Y-%m-%d")
 
                 d = daily[dk]
                 d["input"] += inp
@@ -233,9 +287,7 @@ def _process_jsonl(path, since, daily, models, projects, proj):
                 d["cache_write"] += cw
                 d["cost"] += cost
                 d["messages"] += 1
-                if dk not in session_days:
-                    d["sessions"].add(path.stem)
-                    session_days.add(dk)
+                d["sessions"].add(path.stem)
 
                 models[mk]["tokens"] += total
                 models[mk]["messages"] += 1
@@ -256,7 +308,7 @@ def _day_total(daily, key):
 
 def _sparkline(daily, days=7):
     blocks = " \u2581\u2582\u2583\u2584\u2585\u2586\u2587\u2588"
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now().date()
     vals = [_day_total(daily, (today - timedelta(days=i)).strftime("%Y-%m-%d"))
             for i in range(days - 1, -1, -1)]
     mx = max(vals) if any(vals) else 1
@@ -264,7 +316,7 @@ def _sparkline(daily, days=7):
 
 
 def _streak(daily):
-    today = datetime.now(timezone.utc).date()
+    today = datetime.now().date()
     s = 0
     d = today
     # If no usage today yet, start counting from yesterday (handles timezone offsets)
@@ -407,7 +459,9 @@ def _parse_usage_output(raw):
 
 def build_payload(scrape=True):
     cd = _find_claude_dir()
-    now = datetime.now(timezone.utc)
+    # Day boundaries follow the local clock, so "today" means the same thing
+    # here as it does on the wall and in the usage reset times below.
+    now = datetime.now().astimezone()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     seven_ago = today_start - timedelta(days=7)
 
@@ -442,14 +496,16 @@ def build_payload(scrape=True):
 
     # Week totals
     week_start_key = (today_start - timedelta(days=today_start.weekday())).strftime("%Y-%m-%d")
-    w_total = w_msgs = w_sess = 0
+    w_total = w_msgs = 0
     w_cost = 0.0
+    w_sessions = set()   # union, not a sum: a session spanning two days is one session
     for dk, dd in daily.items():
         if dk >= week_start_key:
             w_total += _day_total(daily, dk)
             w_cost += dd.get("cost", 0.0)
-            w_sess += len(dd.get("sessions", set()))
+            w_sessions |= dd.get("sessions", set())
             w_msgs += dd.get("messages", 0)
+    w_sess = len(w_sessions)
 
     # Model breakdown (sorted by tokens desc)
     models_sorted = sorted(models.items(), key=lambda x: x[1]["tokens"], reverse=True)

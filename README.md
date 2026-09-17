@@ -102,6 +102,14 @@ python claude_trmnl.py --no-scrape
 python claude_trmnl.py --test
 ```
 
+### How the token numbers are counted
+
+Claude Code writes one JSONL line per content block, and every line repeats the whole message's usage. A reply with thinking, text and a tool call therefore lands three times. Resumed and forked sessions copy their history into a new file on top of that. Counting lines would multiply every figure on the display, so the scan folds entries by message and request id first.
+
+Days are local, not UTC, so "today" ends when your clock says it does.
+
+Costs are what the same tokens would have cost at API list prices. A subscription doesn't charge per token, so treat the figure as a comparison rather than a bill. Cache writes cost 1.25x input at the 5-minute TTL and 2x at the 1-hour one, and each message records which it used. Models the script doesn't recognize, one proxied through a gateway for instance, fall back to Sonnet rates.
+
 ### 4. Schedule
 
 Run every 5-10 minutes to keep your display updated.
