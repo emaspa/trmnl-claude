@@ -11,7 +11,7 @@ Reads local Claude Code session data and pulls live usage limits from the API's 
 | Metric | Description |
 |--------|-------------|
 | **Subscription** | Plan type (Pro/Max) and rate limit tier (5x/20x) |
-| **Usage limits** | Session % and weekly % with progress bars and reset time |
+| **Usage limits** | Session %, weekly % and any per-model cap, with progress bars and reset time |
 | **Active sessions** | Currently running Claude Code instances |
 | **Today's tokens** | Input, output, cache read, cache write breakdown |
 | **API-equivalent cost** | What today's usage would cost at API prices |
@@ -124,16 +124,20 @@ The session and weekly percentages come from `anthropic-ratelimit-unified-*` res
 
 | Value | What it does |
 |-------|--------------|
-| `auto` (default) | Headers; falls back to the PTY scraper if they're unavailable |
-| `headers` | Headers only |
+| `auto` (default) | Headers every run, plus a cached per-model row (see below) |
+| `headers` | Headers only, no PTY at all |
 | `pty` | Drives the `/usage` TUI over a PTY, as earlier versions did |
 
-Two things to know about the header method:
+No header reports the per-model weekly row. Plans that cap one model separately show a third bar in `/usage`, labelled with whichever model that is (Fable at the time of writing, Sonnet before it). That is often the limit you actually run into first, so `auto` reads session and week from the headers on every run and refreshes just that one row from the TUI on a slower schedule, caching it in between.
+
+The refresh interval backs off when there's nothing to watch and tightens when there is: every 60 minutes normally, every 15 once the row is above 80%. `--model-limit-ttl MIN` overrides both. A cached row older than 6 hours is dropped rather than shown, because a weekly limit resets and a stale 95% after a reset is worse than a blank.
+
+So a typical run costs half a second, and roughly one run an hour costs 20 seconds. `--usage-method headers` skips the PTY entirely if you would rather not pay that.
+
+Two other things to know about the header method:
 
 - **It spends a token to measure tokens.** One per run, which also nudges the number it reports by a rounding error's worth.
-- **It can't see the per-model weekly row.** Plans that cap one model separately (Fable, at the time of writing) show a third bar in `/usage`, and no header reports it. Use `--usage-method pty` if you want that row on the display; otherwise it's hidden.
-
-The headers are undocumented, so they may change. That's why the PTY scraper is still here rather than deleted.
+- **The headers are undocumented**, so they may change. That's the other reason the PTY scraper is still here rather than deleted.
 
 Anything that spawns `claude` on a short interval should also set `DISABLE_AUTOUPDATER=1`, which the PTY path now does for its own spawns. A scraper session lives about 25 seconds, which isn't long enough for the auto-updater to finish downloading a release. On a 5-minute schedule it restarts that download every run and leaves a truncated binary in `~/.cache/claude/staging` each time. Those only get cleaned up after an update that succeeds, so they accumulate. Interactive sessions and `claude update` are unaffected.
 

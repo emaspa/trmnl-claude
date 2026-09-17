@@ -330,19 +330,79 @@ def _streak(daily):
 
 # ── Usage scraper (PTY) ──────────────────────────────────────────────
 
-def _read_usage(method="auto"):
+def _read_usage(method="auto", model_ttl_min=None):
     """Current rate-limit usage as {"session": {...}, "week_all": {...}}.
 
     Two ways to get the same numbers. The API returns them as response headers
     on any request, which takes about half a second; the /usage TUI shows them
     too, but reading that means driving a real Claude Code session over a PTY
-    for ~20 seconds. Prefer the headers and keep the PTY as a fallback.
+    for ~20 seconds.
+
+    The catch is that no header reports the per-model weekly row, so "auto"
+    reads session and week from the headers every run and refreshes just that
+    row from the TUI on a much slower schedule, caching it in between.
     """
-    if method in ("auto", "headers"):
-        limits = _usage_from_headers()
-        if limits or method == "headers":
-            return limits
-    return _scrape_usage()
+    if method == "pty":
+        return _scrape_usage()
+
+    limits = _usage_from_headers()
+    if not limits:
+        return {} if method == "headers" else _scrape_usage()
+    if method == "headers":
+        return limits
+
+    row, stale = _cached_model_limit(model_ttl_min)
+    if stale:
+        fresh = _scrape_usage().get("week_model")
+        if fresh:
+            _store_model_limit(fresh)
+            row = fresh
+    if row:
+        limits["week_model"] = row
+    return limits
+
+
+# How often "auto" re-scrapes the per-model weekly row. Each refresh costs a
+# ~20s PTY session, so it stays rare -- but a cap you're close to is worth
+# watching more often, since that's when the number actually moves.
+_MODEL_LIMIT_TTL_MIN = 60
+_MODEL_LIMIT_TTL_NEAR_CAP_MIN = 15
+_MODEL_LIMIT_NEAR_CAP_PCT = 80
+# Past this the cached row is dropped rather than shown. A weekly limit resets,
+# and a stale 95% after a reset is worse than showing nothing.
+_MODEL_LIMIT_MAX_AGE_MIN = 360
+
+
+def _model_limit_path():
+    return _find_claude_dir() / ".trmnl_model_limit"
+
+
+def _cached_model_limit(ttl_min=None):
+    """Cached per-model weekly row, and whether it's due a refresh."""
+    try:
+        cached = json.loads(_model_limit_path().read_text("utf-8"))
+        row = cached["row"]
+        age = datetime.now(timezone.utc).timestamp() - float(cached["ts"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None, True
+    if not isinstance(row, dict) or age >= _MODEL_LIMIT_MAX_AGE_MIN * 60:
+        return None, True
+
+    if ttl_min is None:
+        pct = row.get("pct")
+        ttl_min = (_MODEL_LIMIT_TTL_NEAR_CAP_MIN
+                   if isinstance(pct, int) and pct >= _MODEL_LIMIT_NEAR_CAP_PCT
+                   else _MODEL_LIMIT_TTL_MIN)
+    return row, age >= ttl_min * 60
+
+
+def _store_model_limit(row):
+    try:
+        _model_limit_path().write_text(
+            json.dumps({"ts": datetime.now(timezone.utc).timestamp(), "row": row}),
+            encoding="utf-8")
+    except OSError:
+        pass
 
 
 def _usage_from_headers():
@@ -425,17 +485,21 @@ def _fmt_reset(epoch):
 
 
 def _scrape_usage():
-    """Scrape /usage from Claude Code via PTY. Returns dict with session/week pct."""
+    """Scrape /usage from Claude Code via PTY. Returns dict with session/week pct.
+
+    Never raises: a missing PTY library, a `claude` that isn't on PATH or a
+    session that dies mid-scrape all mean "no usage data", not a failed run.
+    """
     import threading
     try:
-        from winpty import PtyProcess
-    except ImportError:
         try:
-            import pexpect
+            from winpty import PtyProcess
         except ImportError:
-            return {}
-        return _scrape_usage_pexpect(pexpect)
-    return _scrape_usage_winpty(PtyProcess, threading)
+            import pexpect
+            return _scrape_usage_pexpect(pexpect)
+        return _scrape_usage_winpty(PtyProcess, threading)
+    except Exception:
+        return {}
 
 
 def _spawn_env():
@@ -575,7 +639,7 @@ def _parse_usage_output(raw):
 
 # ── Build TRMNL payload ─────────────────────────────────────────────
 
-def build_payload(usage_method="auto"):
+def build_payload(usage_method="auto", model_ttl_min=None):
     cd = _find_claude_dir()
     # Day boundaries follow the local clock, so "today" means the same thing
     # here as it does on the wall and in the usage reset times below.
@@ -586,7 +650,8 @@ def build_payload(usage_method="auto"):
     sub_type, tier = _read_credentials(cd)
     active = _count_active_sessions(cd)
     daily, models, projects = _scan_usage(cd, since=seven_ago)
-    usage_limits = _read_usage(usage_method) if usage_method != "off" else {}
+    usage_limits = ({} if usage_method == "off"
+                    else _read_usage(usage_method, model_ttl_min))
 
     # Today
     today_key = now.strftime("%Y-%m-%d")
@@ -819,6 +884,10 @@ def main():
                         help="How to read usage limits: 'headers' asks the API "
                              "(~0.5s, costs one token), 'pty' drives the /usage "
                              "TUI (~20s), 'auto' tries headers then falls back")
+    parser.add_argument("--model-limit-ttl", type=int, metavar="MIN", default=None,
+                        help="How stale the per-model weekly row may get before "
+                             "'auto' re-scrapes it (default: 60 min, 15 when the "
+                             "limit is above 80%%)")
     parser.add_argument("--debounce", type=int, metavar="MIN", default=0,
                         help="Skip if last push was less than MIN minutes ago")
     args = parser.parse_args()
@@ -830,7 +899,8 @@ def main():
         payload = _test_payload()
     else:
         payload = build_payload(
-            usage_method="off" if args.no_scrape else args.usage_method)
+            usage_method="off" if args.no_scrape else args.usage_method,
+            model_ttl_min=args.model_limit_ttl)
 
     if args.dry_run:
         print(json.dumps(payload, indent=2, default=str))
