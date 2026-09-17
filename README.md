@@ -4,14 +4,14 @@ Advanced Claude Code usage dashboard for [TRMNL](https://usetrmnl.com) e-ink dis
 
 ![Claude Code Dashboard on TRMNL](screenshot.png)
 
-Reads local Claude Code session data and optionally scrapes live usage limits via PTY. Cross-platform (Windows, macOS, Linux). Only stdlib + optional `pywinpty` (Windows) or `pexpect` (Unix).
+Reads local Claude Code session data and pulls live usage limits from the API's rate-limit headers. Cross-platform (Windows, macOS, Linux). Stdlib only. The fallback usage scraper needs `pywinpty` (Windows) or `pexpect` (Unix).
 
 ## What it shows
 
 | Metric | Description |
 |--------|-------------|
 | **Subscription** | Plan type (Pro/Max) and rate limit tier (5x/20x) |
-| **Usage limits** | Session %, weekly %, Sonnet % with progress bars and reset time |
+| **Usage limits** | Session % and weekly % with progress bars and reset time |
 | **Active sessions** | Currently running Claude Code instances |
 | **Today's tokens** | Input, output, cache read, cache write breakdown |
 | **API-equivalent cost** | What today's usage would cost at API prices |
@@ -31,7 +31,8 @@ Reads local Claude Code session data and optionally scrapes live usage limits vi
   sessions/*.json     -->  active session count
   projects/**/*.jsonl  -->  token usage per message
 
-claude CLI (via PTY)  -->  session/weekly usage % + reset times
+api.anthropic.com     -->  session/weekly usage % + reset times
+  (rate-limit headers)      (falls back to the /usage TUI over a PTY)
         |
    claude_trmnl.py
         |
@@ -48,7 +49,9 @@ claude CLI (via PTY)  -->  session/weekly usage % + reset times
 
 ### 1. Install dependencies (optional)
 
-For live usage limit scraping:
+Nothing to install for the default setup. The usage limits come from rate-limit headers the API returns on any request, which the stdlib can read on its own.
+
+The fallback scraper reads the same numbers out of the `/usage` TUI and does need a PTY library:
 
 ```bash
 # Windows
@@ -58,7 +61,7 @@ pip install pywinpty
 pip install pexpect
 ```
 
-Without these, the dashboard still works -- it just won't show the session/weekly usage percentages. Use `--no-scrape` to skip.
+Use `--no-scrape` to leave the usage limits out entirely.
 
 ### 2. Configure
 
@@ -92,11 +95,14 @@ python claude_trmnl.py
 # Test locally (prints JSON, does not post)
 python claude_trmnl.py --dry-run
 
-# Post to TRMNL (with usage limit scraping, ~20 sec)
+# Post to TRMNL
 python claude_trmnl.py
 
-# Post without scraping (faster, ~1 sec, skips usage %)
+# Post without the usage limits
 python claude_trmnl.py --no-scrape
+
+# Force one method or the other (see "Reading the usage limits" below)
+python claude_trmnl.py --usage-method pty
 
 # Preview with sample multi-model data
 python claude_trmnl.py --test
@@ -109,6 +115,27 @@ Claude Code writes one JSONL line per content block, and every line repeats the 
 Days are local, not UTC, so "today" ends when your clock says it does.
 
 Costs are what the same tokens would have cost at API list prices. A subscription doesn't charge per token, so treat the figure as a comparison rather than a bill. Cache writes cost 1.25x input at the 5-minute TTL and 2x at the 1-hour one, and each message records which it used. Models the script doesn't recognize, one proxied through a gateway for instance, fall back to Sonnet rates.
+
+### Reading the usage limits
+
+The session and weekly percentages come from `anthropic-ratelimit-unified-*` response headers, which every API response carries. Getting them means one `max_tokens: 1` request, which takes about half a second and spawns no `claude` process.
+
+`--usage-method` picks how to read them:
+
+| Value | What it does |
+|-------|--------------|
+| `auto` (default) | Headers; falls back to the PTY scraper if they're unavailable |
+| `headers` | Headers only |
+| `pty` | Drives the `/usage` TUI over a PTY, as earlier versions did |
+
+Two things to know about the header method:
+
+- **It spends a token to measure tokens.** One per run, which also nudges the number it reports by a rounding error's worth.
+- **It can't see the per-model weekly row.** Plans that cap one model separately (Fable, at the time of writing) show a third bar in `/usage`, and no header reports it. Use `--usage-method pty` if you want that row on the display; otherwise it's hidden.
+
+The headers are undocumented, so they may change. That's why the PTY scraper is still here rather than deleted.
+
+Anything that spawns `claude` on a short interval should also set `DISABLE_AUTOUPDATER=1`, which the PTY path now does for its own spawns. A scraper session lives about 25 seconds, which isn't long enough for the auto-updater to finish downloading a release. On a 5-minute schedule it restarts that download every run and leaves a truncated binary in `~/.cache/claude/staging` each time. Those only get cleaned up after an update that succeeds, so they accumulate. Interactive sessions and `claude update` are unaffected.
 
 ### 4. Schedule
 

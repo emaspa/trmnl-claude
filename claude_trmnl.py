@@ -330,6 +330,100 @@ def _streak(daily):
 
 # ── Usage scraper (PTY) ──────────────────────────────────────────────
 
+def _read_usage(method="auto"):
+    """Current rate-limit usage as {"session": {...}, "week_all": {...}}.
+
+    Two ways to get the same numbers. The API returns them as response headers
+    on any request, which takes about half a second; the /usage TUI shows them
+    too, but reading that means driving a real Claude Code session over a PTY
+    for ~20 seconds. Prefer the headers and keep the PTY as a fallback.
+    """
+    if method in ("auto", "headers"):
+        limits = _usage_from_headers()
+        if limits or method == "headers":
+            return limits
+    return _scrape_usage()
+
+
+def _usage_from_headers():
+    """Read usage from the rate-limit headers on a 1-token API call.
+
+    Costs one token to measure, and the headers are undocumented, so treat any
+    failure as "no data" and let the caller fall back to the PTY scrape.
+
+    Raw HTTP rather than the anthropic SDK on purpose: this asks for response
+    metadata rather than a completion, and the project stays stdlib-only.
+    """
+    cred = _find_claude_dir() / ".credentials.json"
+    try:
+        oauth = json.loads(cred.read_text("utf-8")).get("claudeAiOauth", {})
+    except (OSError, ValueError):
+        return {}
+    # Claude Code rotates this token every few hours, so never cache it.
+    token = oauth.get("accessToken")
+    if not token:
+        return {}
+
+    req = urllib.request.Request(
+        "https://api.anthropic.com/v1/messages",
+        data=json.dumps({
+            "model": "claude-haiku-4-5",
+            "max_tokens": 1,
+            "messages": [{"role": "user", "content": "."}],
+        }).encode("utf-8"),
+        headers={
+            "content-type": "application/json",
+            "authorization": f"Bearer {token}",
+            "anthropic-version": "2023-06-01",
+            "anthropic-beta": "oauth-2025-04-20",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            headers = r.headers
+    except urllib.error.HTTPError as e:
+        # 429 still carries the utilization headers -- that's the case we most
+        # want to report. Anything else (401 on an expired token, 5xx) has none.
+        headers = e.headers
+    except Exception:
+        return {}
+
+    out = {}
+    for key, prefix in (("session", "5h"), ("week_all", "7d")):
+        util = headers.get(f"anthropic-ratelimit-unified-{prefix}-utilization")
+        reset = headers.get(f"anthropic-ratelimit-unified-{prefix}-reset")
+        if util is None:
+            continue
+        try:
+            pct = round(float(util) * 100)
+        except ValueError:
+            continue
+        out[key] = {"pct": pct, "resets": _fmt_reset(reset)}
+    # No per-model counterpart exists, so week_sonnet stays absent and the
+    # dashboard shows it as "—". Use --usage-method pty if you need it.
+    return out
+
+
+def _fmt_reset(epoch):
+    """Format a reset timestamp for the display: '2:59pm', or 'Sep 18, 9am'
+    once it's past midnight."""
+    try:
+        t = datetime.fromtimestamp(int(epoch)).astimezone()
+    except (TypeError, ValueError):
+        return None
+
+    def _fmt(fmt):
+        try:
+            return t.strftime(fmt)
+        except ValueError:            # Windows strftime has no %-
+            return t.strftime(fmt.replace("%-", "%#"))
+
+    clock = _fmt("%-I:%M%p").lower()
+    if t.date() == datetime.now().date():
+        return clock
+    return _fmt("%b %-d, ") + clock
+
+
 def _scrape_usage():
     """Scrape /usage from Claude Code via PTY. Returns dict with session/week pct."""
     import threading
@@ -344,9 +438,22 @@ def _scrape_usage():
     return _scrape_usage_winpty(PtyProcess, threading)
 
 
+def _spawn_env():
+    """Environment for a scraper's `claude` process.
+
+    These sessions live ~25 seconds. That isn't long enough for the auto
+    updater to finish fetching a new release, so on a short polling interval it
+    restarts the download every run and leaves a truncated binary in
+    ~/.cache/claude/staging each time -- which only gets cleaned up after an
+    update that succeeds. Opt these spawns out; interactive sessions and
+    `claude update` still update normally.
+    """
+    return {**os.environ, "DISABLE_AUTOUPDATER": "1"}
+
+
 def _scrape_usage_winpty(PtyProcess, threading):
     """Windows: use winpty."""
-    proc = PtyProcess.spawn('claude', dimensions=(45, 180))
+    proc = PtyProcess.spawn('claude', dimensions=(45, 180), env=_spawn_env())
     output = []
 
     def reader():
@@ -401,7 +508,8 @@ def _scrape_usage_pexpect(pexpect):
             except Exception:
                 pass
 
-    proc = pexpect.spawn('claude', dimensions=(55, 200), encoding='utf-8', timeout=30)
+    proc = pexpect.spawn('claude', dimensions=(55, 200), encoding='utf-8',
+                         timeout=30, env=_spawn_env())
     try:
         proc.expect([r'[>❯]', r'\u2570'], timeout=10)
     except Exception:
@@ -426,38 +534,48 @@ def _scrape_usage_pexpect(pexpect):
 
 def _parse_usage_output(raw):
     """Parse /usage TUI output into dict."""
-    import re
     clean = re.sub(
         r'\x1b\[[0-9;]*[a-zA-Z]|\x1b\[\?[0-9;]*[a-zA-Z]'
         r'|\x1b\].*?(?:\x07|\x1b\\)|\x1b[()][AB012]|\x1b[>=<]',
         '', raw
     )
-    result = {}
-    # The /usage TUI is drawn with cursor positioning, so winpty capture often
-    # merges adjacent words ("Currentsession", "allmodels", "ResetsJun4") and
-    # drops the odd character ("Sonnet only" -> "Sonet nly"). Keep whitespace
-    # optional (\s*) and tolerate dropped letters so the percentages still parse.
-    for key, pattern in {
-        "session": r"(?i)current\s*session",
-        "week_all": r"(?i)(?:current\s*)?week\s*\(?\s*all\s*models",
-        "week_sonnet": r"(?i)(?:current\s*)?week\s*\(?\s*son+et",
-    }.items():
-        m = re.search(pattern, clean)
-        if not m:
-            continue
-        block = clean[m.start():m.start() + 400]
+
+    def row(match):
+        """Percentage and reset time from the block a heading introduces."""
+        block = clean[match.start():match.start() + 400]
         pct = re.search(r'(\d+)\s*%', block)
         reset = re.search(r'[Rr]esets?\s*(.+?)(?:\r|\n|$)', block)
-        result[key] = {
+        return {
             "pct": int(pct.group(1)) if pct else None,
             "resets": reset.group(1).strip() if reset else None,
         }
+
+    result = {}
+    # The /usage TUI is drawn with cursor positioning, so winpty capture often
+    # merges adjacent words ("Currentsession", "allmodels", "ResetsJun4") and
+    # drops the odd character. Keep whitespace optional (\s*) so percentages
+    # still parse.
+    for key, pattern in {
+        "session": r"(?i)current\s*session",
+        "week_all": r"(?i)(?:current\s*)?week\s*\(?\s*all\s*models",
+    }.items():
+        m = re.search(pattern, clean)
+        if m:
+            result[key] = row(m)
+
+    # Plans that cap one model separately get a third row. Which model that is
+    # has changed over time (Sonnet once, Fable now) and differs by plan, so
+    # read the name off the panel instead of matching one hardcoded model.
+    m = re.search(r'(?i)(?:current\s*)?week\s*\(\s*(?!all\s*models)'
+                  r'([A-Za-z][\w .-]{0,20}?)\s*\)', clean)
+    if m:
+        result["week_model"] = {**row(m), "name": m.group(1).strip().title()}
     return result
 
 
 # ── Build TRMNL payload ─────────────────────────────────────────────
 
-def build_payload(scrape=True):
+def build_payload(usage_method="auto"):
     cd = _find_claude_dir()
     # Day boundaries follow the local clock, so "today" means the same thing
     # here as it does on the wall and in the usage reset times below.
@@ -468,7 +586,7 @@ def build_payload(scrape=True):
     sub_type, tier = _read_credentials(cd)
     active = _count_active_sessions(cd)
     daily, models, projects = _scan_usage(cd, since=seven_ago)
-    usage_limits = _scrape_usage() if scrape else {}
+    usage_limits = _read_usage(usage_method) if usage_method != "off" else {}
 
     # Today
     today_key = now.strftime("%Y-%m-%d")
@@ -545,7 +663,10 @@ def build_payload(scrape=True):
         # Usage limits
         "u_session": usage_limits.get("session", {}).get("pct", "—"),
         "u_week": usage_limits.get("week_all", {}).get("pct", "—"),
-        "u_sonnet": usage_limits.get("week_sonnet", {}).get("pct", "—"),
+        # Third limit row: present only on plans that cap one model separately,
+        # and the model varies -- u_model carries whichever one the panel named.
+        "u_sonnet": usage_limits.get("week_model", {}).get("pct", "—"),
+        "u_model": usage_limits.get("week_model", {}).get("name", "Sonnet"),
         "u_reset": usage_limits.get("session", {}).get("resets", ""),
         # Timestamp
         "updated": updated,
@@ -639,6 +760,7 @@ def _test_payload():
         "u_session": 42,
         "u_week": 18,
         "u_sonnet": 5,
+        "u_model": "Fable",
         "u_reset": "in 3h",
     }
 
@@ -691,7 +813,12 @@ def main():
     parser.add_argument("--test", action="store_true",
                         help="Use sample multi-model data for layout preview")
     parser.add_argument("--no-scrape", action="store_true",
-                        help="Skip usage scraping (faster, no PTY needed)")
+                        help="Skip the usage limits entirely (local token data only)")
+    parser.add_argument("--usage-method", choices=["auto", "headers", "pty"],
+                        default="auto",
+                        help="How to read usage limits: 'headers' asks the API "
+                             "(~0.5s, costs one token), 'pty' drives the /usage "
+                             "TUI (~20s), 'auto' tries headers then falls back")
     parser.add_argument("--debounce", type=int, metavar="MIN", default=0,
                         help="Skip if last push was less than MIN minutes ago")
     args = parser.parse_args()
@@ -702,7 +829,8 @@ def main():
     if args.test:
         payload = _test_payload()
     else:
-        payload = build_payload(scrape=not args.no_scrape)
+        payload = build_payload(
+            usage_method="off" if args.no_scrape else args.usage_method)
 
     if args.dry_run:
         print(json.dumps(payload, indent=2, default=str))

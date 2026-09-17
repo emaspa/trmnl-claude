@@ -13,12 +13,16 @@
         <tr>
           <td class="title title--small lg:title--large py--0.5"><b>Sess {{ u_session }}%</b></td>
           <td class="title title--small lg:title--large py--0.5"><b>Week {{ u_week }}%</b></td>
-          <td class="title title--small lg:title--large py--0.5"><b>Son {{ u_sonnet }}%</b></td>
+          {% if u_sonnet != "—" %}
+          <td class="title title--small lg:title--large py--0.5"><b>{{ u_model }} {{ u_sonnet }}%</b></td>
+          {% endif %}
         </tr>
         <tr>
           <td class="py--0.5 pr--1"><div class="progress-bar progress-bar--xsmall lg:progress-bar--base"><div class="track"><div class="fill" style="width:{{ u_session }}%"></div></div></div></td>
           <td class="py--0.5 pr--1"><div class="progress-bar progress-bar--xsmall lg:progress-bar--base"><div class="track"><div class="fill" style="width:{{ u_week }}%"></div></div></div></td>
+          {% if u_sonnet != "—" %}
           <td class="py--0.5 pr--1"><div class="progress-bar progress-bar--xsmall lg:progress-bar--base"><div class="track"><div class="fill" style="width:{{ u_sonnet }}%"></div></div></div></td>
+          {% endif %}
         </tr>
       </table>
       {% endif %}
