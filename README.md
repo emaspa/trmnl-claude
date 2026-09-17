@@ -161,7 +161,7 @@ Detection is by name. A model id naming one of the families `fable`, `opus`, `so
 
 That leaves one gap. A new Anthropic family whose id does not start with `claude` and does not contain one of the four family names would be dropped until someone adds it to `_ANTHROPIC_FAMILIES`. A model from a vendor missing from the list, and not prefixed `claude`, is also dropped, which is the right outcome by accident.
 
-`--include-other-models` restores the old behaviour, counting everything at Sonnet 4.6 rates where the price table has no entry. If your gateway bills you per token and you want the display to reflect that spend, or you want the totals to mean "everything Claude Code did today" regardless of the bars, use it. In a fleet, pass it on every host: each host filters when it scans, so the master's flag only affects the master's own tokens and the model slots.
+`--include-other-models` restores the old behaviour, counting everything at Sonnet 4.6 rates where the price table has no entry. If your gateway bills you per token and you want the display to reflect that spend, or you want the totals to mean "everything Claude Code did today" regardless of the bars, use it. In a fleet, each host filters when it scans, and the poster passes its own setting along when it collects, so hosts it can reach count the same population. A host it couldn't reach, or one that took over on its own timer with different flags, can still disagree. The poster then prints a warning to stderr naming that host rather than summing the mixture in silence. Passing the flag in every host's timer entry keeps that from happening.
 
 What was excluded is tallied rather than discarded. Two merge variables, `o_tokens` and `o_messages`, carry today's excluded tokens and message count, blank when there were none. No shipped template renders them, but a template of your own can.
 
@@ -336,7 +336,7 @@ Assume `workstation` will be the master and `laptop` the secondary. Both already
 
 4. On `workstation`, run `python claude_trmnl.py --dry-run`. The output should show `"fleet": "2/2"`. A `1/2` means the pull from `laptop` failed. Run the ssh line from step 2 again and read stderr.
 
-5. Run `python claude_trmnl.py` on `workstation` once for real, so its push writes a heartbeat into `laptop`'s store. A secondary with no heartbeat on file assumes the master has never posted and takes over, so skipping this means `laptop` posts its own numbers once before the master's next run corrects it. Harmless, but confusing. From then on, a secondary that finds a healthy master prints nothing and posts nothing, which is correct and a little unnerving the first time. To see what it holds, run `python claude_trmnl.py --emit-store` on it. To see its own numbers alone, `--no-fleet --dry-run`.
+5. Run `python claude_trmnl.py` on `workstation` once for real, so its push writes a heartbeat into `laptop`'s store. A secondary with no heartbeat on file assumes the master has never posted and takes over, so skipping this means `laptop` posts its own numbers on every run until the master's first push arrives. Harmless, but confusing. From then on, a secondary that finds a healthy master prints nothing and posts nothing, which is correct and a little unnerving the first time. To see what it holds, run `python claude_trmnl.py --emit-store` on it. To see its own numbers alone, `--no-fleet --dry-run`.
 
 If the config names a host that doesn't exist, that host shows as missing forever and the title bar reads `1/2`. If the config leaves out the host it runs on, the script prints `Warning: this host is 'x', which the fleet config doesn't list` to stderr and behaves as a last-in-line secondary. Both symptoms mean a `name` doesn't match `hostname -s`.
 
@@ -368,9 +368,10 @@ Every host keeps `~/.claude/.trmnl_fleet.json` (or under `~/.config/claude` if t
 - `hosts`: the latest aggregate seen from each host, keyed by hostname, each stamped with the time it was scanned
 - `members`: when each host was first seen, which sets the succession order
 - `last_post`: when the display was last posted to, and by whom
+- `last_post_by`: when each host last posted, keyed by hostname. This is the heartbeat the takeover checks read
 - `limits`: the usage percentages, from the last host that could read them
 
-Whenever a store arrives from another host, the two merge one key at a time. The newest aggregate per host wins, so a host's own fresh scan always beats a copy of it someone else cached. The earliest `joined` time per host wins, so deleting your store and letting it rebuild doesn't move you up the queue. The newest `last_post` wins. The newest `limits` win.
+Whenever a store arrives from another host, the two merge one key at a time. The newest aggregate per host wins, so a host's own fresh scan always beats a copy of it someone else cached. The earliest `joined` time per host wins, so deleting your store and letting it rebuild doesn't move you up the queue. The newest `last_post` wins, and so does the newest `last_post_by` entry per host. The newest `limits` win.
 
 Because the store is keyed by host, a secondary that takes over replaces its own entry and leaves the others alone. That is what stops a takeover from counting a machine twice. When the master comes back, it pulls the stores, keeps the newest entry per host, and carries on with no special recovery step.
 
@@ -388,7 +389,7 @@ Past two machines, "a secondary takes over" isn't enough. Every secondary would 
 
 Join order comes from the store rather than the config, so reordering `hosts` changes nothing, and because the earliest sighting wins on merge, a machine can't jump the queue by rebuilding its store. To reset the order you'd have to delete the store on every host at once. Hosts that joined in the same second fall back to alphabetical order. A successor that is itself down never posts, the heartbeat keeps ageing, and the next one's turn arrives without anyone coordinating it.
 
-The heartbeat is the time of the last post by anyone, not by the master. A successor that took over resets it with its own post and then, on its next run five minutes later, sees a fresh heartbeat and stands down. So during an outage the display refreshes once every `takeover_after_min`, not every run. Lower `takeover_after_min` if that is too slow for you, keeping it well above your timer interval so a master that is merely slow doesn't get overtaken.
+The queue is measured against the master's own last post, so a successor that took over keeps posting on its normal timer for as long as the master stays quiet. The check it makes after collecting looks at every other host instead, so once one successor is driving the display, the others see its posts and stay off it. Keep `takeover_after_min` well above your timer interval, or a master that is merely slow gets overtaken.
 
 ### Failover and recovery
 
@@ -420,11 +421,11 @@ A normal minute: `workstation` scans itself, runs `run.sh --emit-store` on `lapt
 
 At 10:00 `workstation` loses power. Its last post was 09:58. Every 5 minutes `laptop` scans, finds the heartbeat aged 7, 12, 17 minutes and stops. At 10:45 the heartbeat is 47 minutes old, past `takeover_after_min`. `laptop` pulls from `mac-mini` (fresh scan) and from `workstation` (unreachable, 8-second connect timeout). The heartbeat is still 47 minutes old, so nobody beat it to the post. `laptop` runs Linux, so it reads the limits from the headers itself. It posts and pushes the store to `mac-mini`. The display now shows `3/3` still, because `workstation`'s cached entry from 09:58 is under an hour old, and the tokens `workstation` counted this morning are still in the total.
 
-At 10:50 `mac-mini` runs. It is second in line, so its threshold is 60 minutes, and in any case the heartbeat is now 5 minutes old since `laptop` pushed it over. It stops. Had `laptop` been down as well, `mac-mini` would have posted at 11:00.
+At 10:50 `laptop` runs again. The master is still silent, its own post doesn't count against it, so it collects and posts again. It goes on doing that every 5 minutes. The same minute `mac-mini` runs. It is second in line, so its threshold is 60 minutes of master silence, and the master has been silent for 52. It stops. At 11:00 the master has been silent for 62, so `mac-mini` collects, finds that `laptop` posted 5 minutes ago, and stands down. Had `laptop` been down as well, that 11:00 collection would have found nobody posting and `mac-mini` would have taken over.
 
-At 10:58 the `workstation` entry turns 60 minutes old and stops counting. The marker turns `2/3` on the next post, which is `laptop`'s at 11:35, because its own 10:45 post reset the heartbeat and it waits until that is more than 45 minutes old again.
+At 10:58 the `workstation` entry turns 60 minutes old and stops counting. The marker turns `2/3` on `laptop`'s 11:00 post.
 
-At 12:10 `workstation` boots. Its cron fires, it pulls both stores, keeps its own fresh scan and the newest entry for each of the others, sees the newest `last_post` was `laptop`'s at 11:35, posts as the master (it never checks the heartbeat) and pushes. The marker goes back to `3/3`. At 12:15 `laptop` sees a heartbeat 5 minutes old and stands down.
+At 12:10 `workstation` boots. Its cron fires, it pulls both stores, keeps its own fresh scan and the newest entry for each of the others, posts as the master (it never checks the heartbeat) and pushes. The marker goes back to `3/3`. At 12:15 `laptop` sees the master posted 5 minutes ago and stands down.
 
 ### Caveats
 
@@ -452,7 +453,7 @@ Keep the timer running on every machine. The master's ssh pull runs a scan on th
 | `--emit-store` | | Refresh this host's entry in the fleet store, print the store as JSON, exit |
 | `--ingest-store` | | Merge a fleet store read from stdin into the local one, exit |
 
-The script writes three small files next to your Claude data, `~/.claude/.trmnl_last_push` for the debounce, `~/.claude/.trmnl_model_limit` for the cached per-model row, and `~/.claude/.trmnl_fleet.json` for the fleet store. The first two can go at any time. Deleting the fleet store on a secondary also deletes its copy of the heartbeat, so in a two-machine fleet it posts once on its own before the master's next push sets it straight. In a larger fleet it pulls the heartbeat from a peer first and stays quiet.
+The script writes three small files next to your Claude data, `~/.claude/.trmnl_last_push` for the debounce, `~/.claude/.trmnl_model_limit` for the cached per-model row, and `~/.claude/.trmnl_fleet.json` for the fleet store. The first two can go at any time. Deleting the fleet store on a secondary also deletes its copy of the heartbeat, so in a two-machine fleet it posts on its own until the master's next push sets it straight, five minutes at most. In a larger fleet it pulls the heartbeat from a peer first and stays quiet.
 
 ## License
 

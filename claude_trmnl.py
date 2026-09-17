@@ -1377,18 +1377,27 @@ def _run_fleet(args, cfg):
         # the display untouched for a whole takeover window at a time.
         return posted_ago(cfg["master"])
 
-    def someone_ahead_posted():
+    def another_host_posted():
+        # Any other host, not only ones ranked ahead. Once someone is driving
+        # the display the queue has done its job, and handing back to a
+        # returning senior successor would buy nothing but a window where both
+        # of them post.
         return min((posted_ago(h["name"]) for h in others), default=float("inf"))
 
     if not is_master:
         rank = _successor_rank(cfg, store, me)
         wait_min = (cfg["takeover_after_min"]
                     + rank * cfg["successor_stagger_min"])
-        if master_quiet_for() <= wait_min * 60:
-            # Either the master is posting for all of us, or a successor ahead
-            # in the queue gets first refusal. Keep the fresh scan so whoever
-            # does post has something current to collect, and stay off the
-            # display.
+        # Stand down if the master is posting for all of us, if a successor
+        # ahead in the queue gets first refusal, or if this host already knows
+        # another one is driving. That last case is worth catching here rather
+        # than after collecting: during an outage every idle successor would
+        # otherwise ssh to every host on every run, stalling on the master's
+        # dead port each time, only to learn what its own store already said.
+        if (master_quiet_for() <= wait_min * 60
+                or another_host_posted() <= cfg["takeover_after_min"] * 60):
+            # Keep the fresh scan so whoever does post has something current to
+            # collect, and stay off the display.
             _save_store(store)
             return
 
@@ -1400,12 +1409,12 @@ def _run_fleet(args, cfg):
         if got:
             _merge_stores(store, got)
 
-    # Collecting can reveal that the master, or a successor further up the
-    # queue, has posted in the meantime. Yield instead of posting over them.
-    # Any other host counts here, not just the master: while the master is away
-    # the point is that exactly one successor drives the display.
+    # Collecting can reveal that the master, or another successor, has posted
+    # in the meantime. Yield instead of posting over them. This repeats the
+    # check above against fresher information, and catches the case the local
+    # store can't: a driver whose push never reached this host.
     if not is_master and min(master_quiet_for(),
-                             someone_ahead_posted()) <= cfg["takeover_after_min"] * 60:
+                             another_host_posted()) <= cfg["takeover_after_min"] * 60:
         _save_store(store)
         return
 
