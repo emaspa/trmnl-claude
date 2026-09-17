@@ -19,8 +19,8 @@ Reads local Claude Code session data and pulls live usage limits from the API's 
 | **Session & message counts** | How many sessions and messages today |
 | **Model breakdown** | Per-model usage with percentage bars (last 7 days plus today) |
 | **Weekly totals** | Tokens, cost, sessions for the current week, Monday to now |
-| **7-day sparkline** | Activity trend, one block per day |
-| **Usage streak** | Consecutive days of Claude Code usage |
+| **7-day sparkline** | Activity trend, one block per day, any model |
+| **Usage streak** | Consecutive days of Claude Code usage, any model |
 | **Trend indicator** | Up/down/flat vs yesterday |
 
 The payload also carries `top_project` (most active project by tokens), a per-model cost `m1_cost`, `m2_cost`, `m3_cost`, and `o_tokens` / `o_messages` (today's usage from models that aren't Anthropic's, see below). None of the four shipped templates render those. They are there for a template of your own.
@@ -153,7 +153,7 @@ Costs are what the same tokens would have cost at API list prices. A subscriptio
 
 ### Models that aren't Anthropic's
 
-If you route another vendor's model through Claude Code, via a gateway that speaks the Anthropic API, its transcripts land in the same JSONL files. By default the script leaves those entries out of every figure: no tokens, no cost, no message or session count, no model or project row.
+If you route another vendor's model through Claude Code, via a gateway that speaks the Anthropic API, its transcripts land in the same JSONL files. By default the script leaves those entries out of every figure that Anthropic prices or rate-limits: no tokens, no cost, no message or session count, no model or project row, and the trend arrow follows the Today total it sits beside. Two widgets count the other way. The streak and the sparkline answer "was there work that day", and a day spent entirely on a gateway model was still a day of work, so those two count every model. The display therefore shows two populations on purpose. Anything with a dollar figure or a limit bar next to it is Anthropic only; the two activity widgets are everything.
 
 The reason is that two of the numbers on the display only make sense for Anthropic models. The cost comes off Anthropic's price list, and the session, week and per-model bars come from Anthropic's rate-limit headers. A GPT or Qwen reply is priced by neither and counted against neither. Folding its tokens in invents a dollar figure for it and leaves the totals describing a different population than the bars sitting next to them. On the fleet this was written for, that had put $264 of a $724 week on the display for models that cost nothing against the subscription, and the model slots read Gpt, Opus, Qwen3.8 while the per-model bar beside them warned Fable was at 95%.
 
@@ -161,11 +161,11 @@ Detection is by name. A model id naming one of the families `fable`, `opus`, `so
 
 That leaves one gap. A new Anthropic family whose id does not start with `claude` and does not contain one of the four family names would be dropped until someone adds it to `_ANTHROPIC_FAMILIES`. A model from a vendor missing from the list, and not prefixed `claude`, is also dropped, which is the right outcome by accident.
 
-`--include-other-models` restores the old behaviour, counting everything at Sonnet 4.6 rates where the price table has no entry. If your gateway bills you per token and you want the display to reflect that spend, or you want the totals to mean "everything Claude Code did today" regardless of the bars, use it. In a fleet, each host filters when it scans, and the poster passes its own setting along when it collects, so hosts it can reach count the same population. A host it couldn't reach, or one that took over on its own timer with different flags, can still disagree. The poster then prints a warning to stderr naming that host rather than summing the mixture in silence. Passing the flag in every host's timer entry keeps that from happening.
+`--strict-activity` narrows the streak and sparkline to Anthropic models too, so every number on the display describes one population. `--include-other-models` restores the old behaviour, counting everything at Sonnet 4.6 rates where the price table has no entry. If your gateway bills you per token and you want the display to reflect that spend, or you want the totals to mean "everything Claude Code did today" regardless of the bars, use it. In a fleet, each host filters when it scans, and the poster passes its own setting along when it collects, so hosts it can reach count the same population. A host it couldn't reach, or one that took over on its own timer with different flags, can still disagree. The poster then prints a warning to stderr naming that host rather than summing the mixture in silence. Passing the flag in every host's timer entry keeps that from happening.
 
 What was excluded is tallied rather than discarded. Two merge variables, `o_tokens` and `o_messages`, carry today's excluded tokens and message count, blank when there were none. No shipped template renders them, but a template of your own can.
 
-If you upgrade with a gateway in use, expect the numbers to drop the first time the new version posts. Week totals, cost, the sparkline and the model breakdown all shrink to Anthropic-only usage. That is the fix working, not data loss.
+If you upgrade with a gateway in use, expect the numbers to move the first time the new version posts, in both directions. Week totals, cost, message counts and the model breakdown shrink to Anthropic-only usage. The streak and the sparkline can go up, because a day that only had gateway traffic now counts as a day worked and draws a block. That is the fix working, not data loss.
 
 ### Reading the usage limits
 
@@ -389,7 +389,11 @@ Past two machines, "a secondary takes over" isn't enough. Every secondary would 
 
 Join order comes from the store rather than the config, so reordering `hosts` changes nothing, and because the earliest sighting wins on merge, a machine can't jump the queue by rebuilding its store. To reset the order you'd have to delete the store on every host at once. Hosts that joined in the same second fall back to alphabetical order. A successor that is itself down never posts, the heartbeat keeps ageing, and the next one's turn arrives without anyone coordinating it.
 
-The queue is measured against the master's own last post, so a successor that took over keeps posting on its normal timer for as long as the master stays quiet. The check it makes after collecting looks at every other host instead, so once one successor is driving the display, the others see its posts and stay off it. Keep `takeover_after_min` well above your timer interval, or a master that is merely slow gets overtaken.
+The queue is measured against the master's own last post, so a successor that took over keeps posting on its normal timer for as long as the master stays quiet. Every other successor stands down as soon as its own store shows that some other host posted within the last `takeover_after_min`. The queue only decides who takes over. Once someone is driving, it keeps the display until the master returns, and a senior successor that comes back from its own outage yields to it rather than taking the display back. Forcing that handover would buy nothing except a window where both post.
+
+The stand-down check runs twice on purpose. The first pass reads the local store, which the driver's pushes keep current, so an idle successor exits without an ssh call during an outage. The second pass repeats the same check after collecting, against fresher information, and catches the one case the local file can't: a driver whose push never reached this host. A driver that dies is replaced the same way the master was, once its last post is more than `takeover_after_min` old.
+
+Keep `takeover_after_min` well above your timer interval, or a master that is merely slow gets overtaken.
 
 ### Failover and recovery
 
@@ -421,7 +425,7 @@ A normal minute: `workstation` scans itself, runs `run.sh --emit-store` on `lapt
 
 At 10:00 `workstation` loses power. Its last post was 09:58. Every 5 minutes `laptop` scans, finds the heartbeat aged 7, 12, 17 minutes and stops. At 10:45 the heartbeat is 47 minutes old, past `takeover_after_min`. `laptop` pulls from `mac-mini` (fresh scan) and from `workstation` (unreachable, 8-second connect timeout). The heartbeat is still 47 minutes old, so nobody beat it to the post. `laptop` runs Linux, so it reads the limits from the headers itself. It posts and pushes the store to `mac-mini`. The display now shows `3/3` still, because `workstation`'s cached entry from 09:58 is under an hour old, and the tokens `workstation` counted this morning are still in the total.
 
-At 10:50 `laptop` runs again. The master is still silent, its own post doesn't count against it, so it collects and posts again. It goes on doing that every 5 minutes. The same minute `mac-mini` runs. It is second in line, so its threshold is 60 minutes of master silence, and the master has been silent for 52. It stops. At 11:00 the master has been silent for 62, so `mac-mini` collects, finds that `laptop` posted 5 minutes ago, and stands down. Had `laptop` been down as well, that 11:00 collection would have found nobody posting and `mac-mini` would have taken over.
+At 10:50 `laptop` runs again. The master is still silent, its own post doesn't count against it, so it collects and posts again. It goes on doing that every 5 minutes. The same minute `mac-mini` runs. It is second in line, so its threshold is 60 minutes of master silence, and the master has been silent for 52. It stops. At 11:00 the master has been silent for 62, but `laptop`'s pushes have been landing in `mac-mini`'s store every 5 minutes, so `mac-mini` sees a post 5 minutes old and stands down without calling anyone. Had `laptop` been down as well, `mac-mini` would have collected at 11:00, found nobody posting, and taken over.
 
 At 10:58 the `workstation` entry turns 60 minutes old and stops counting. The marker turns `2/3` on `laptop`'s 11:00 post.
 
@@ -448,6 +452,7 @@ Keep the timer running on every machine. The master's ssh pull runs a scan on th
 | `--model-limit-ttl MIN` | 60, or 15 above 80% | How stale the per-model row may get before `auto` re-scrapes it |
 | `--debounce MIN` | 0 | Exit at once if the last post was under MIN minutes ago |
 | `--include-other-models` | | Count models that aren't Anthropic's in the totals, cost and model breakdown, at Sonnet 4.6 rates where the price table has no entry |
+| `--strict-activity` | | Count only Anthropic models in the streak and sparkline as well |
 | `--fleet-config PATH` | `$TRMNL_FLEET_CONFIG`, else `fleet.json` beside the script | Where the fleet config lives |
 | `--no-fleet` | | Ignore the fleet config and post this host alone |
 | `--emit-store` | | Refresh this host's entry in the fleet store, print the store as JSON, exit |

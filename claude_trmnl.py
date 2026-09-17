@@ -1297,16 +1297,22 @@ def main():
     parser.add_argument("--fleet-config", metavar="PATH", default=None,
                         help="Fleet config file (default: $TRMNL_FLEET_CONFIG, "
                              "else fleet.json beside this script)")
-    parser.add_argument("--include-other-models", action="store_true",
-                        help="Count models that aren't Anthropic's in the "
-                             "totals, cost and model breakdown. They are left "
-                             "out by default: no entry in the price table, and "
-                             "no bearing on the usage limits shown beside them")
-    parser.add_argument("--strict-activity", action="store_true",
-                        help="Count only Anthropic models in the streak and "
-                             "sparkline. By default those two count a day's "
-                             "work whoever served it, since they say whether "
-                             "you worked rather than what it cost")
+    # Mutually exclusive, because --strict-activity cannot be honoured once
+    # --include-other-models has folded the gateway's tokens into the totals:
+    # nothing records which of them were which any more, so the streak would
+    # quietly stay wide. Refusing both is better than ignoring one.
+    others_group = parser.add_mutually_exclusive_group()
+    others_group.add_argument("--include-other-models", action="store_true",
+                              help="Count models that aren't Anthropic's in the "
+                                   "totals, cost and model breakdown. They are "
+                                   "left out by default: no entry in the price "
+                                   "table, and no bearing on the usage limits "
+                                   "shown beside them")
+    others_group.add_argument("--strict-activity", action="store_true",
+                              help="Count only Anthropic models in the streak "
+                                   "and sparkline. By default those two count a "
+                                   "day's work whoever served it, since they say "
+                                   "whether you worked rather than what it cost")
     parser.add_argument("--no-fleet", action="store_true",
                         help="Ignore the fleet config and post this host alone")
     parser.add_argument("--emit-store", action="store_true",
