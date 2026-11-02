@@ -10,8 +10,8 @@ Reads local Claude Code session data and pulls live usage limits from the API's 
 
 | Metric | Description |
 |--------|-------------|
-| **Subscription** | Plan type (Pro/Max) and rate limit tier (5x/20x) |
-| **Usage limits** | Session %, weekly % and any per-model cap, with progress bars and reset time |
+| **Subscription** | Plan name (Pro, Max or Ultra) |
+| **Usage limits** | Session %, weekly % and any per-model cap, with progress bars and reset time. No session bar on a verified Ultra account, which has no 5-hour limit |
 | **Active sessions** | Currently running Claude Code instances |
 | **Fleet marker** | Hosts reporting out of hosts configured, `3/3`. Blank on a single machine |
 | **Today's tokens** | Input, output, cache read, cache write breakdown |
@@ -29,7 +29,7 @@ The payload also carries `top_project` (most active project by tokens), a per-mo
 
 ```
 ~/.claude/
-  .credentials.json   -->  subscription type + tier
+  .credentials.json   -->  plan name
   sessions/*.json     -->  active session count
   projects/**/*.jsonl  -->  token usage per message
 
@@ -149,7 +149,9 @@ Claude Code writes one JSONL line per content block, and every line repeats the 
 
 Days are local, not UTC, so "today" ends when your clock says it does.
 
-Costs are what the same tokens would have cost at API list prices. A subscription doesn't charge per token, so treat the figure as a comparison rather than a bill. Cache writes cost 1.25x input at the 5-minute TTL and 2x at the 1-hour one, and each message records which it used.
+Costs are what the same tokens would have cost at API list prices. A subscription doesn't charge per token, so treat the figure as a comparison rather than a bill. Cache writes cost 1.25x input at the 5-minute TTL and 2x at the 1-hour one, and each message records which it used. Fast-mode responses on Opus 5 and 5.5 cost twice the standard rate. Haiku 5.5 switches to its higher rate card when a prompt, cached tokens included, runs past 100K tokens.
+
+The price table covers Fable 5.1 and 5, Mythos 5.1 and 5, Opus 5.5, Opus 5 (which also prices Opus 4.6 to 4.8), Sonnet 5.5 and 5, Sonnet 4.6, Haiku 5.5 and Haiku 4.5. Older models fold into the nearest entry in their family. Rows in the model breakdown are per family, so a week split between Opus 5 and Opus 5.5 shows as one Opus row.
 
 ### Models that aren't Anthropic's
 
@@ -157,9 +159,9 @@ If you route another vendor's model through Claude Code, via a gateway that spea
 
 The reason is that two of the numbers on the display only make sense for Anthropic models. The cost comes off Anthropic's price list, and the session, week and per-model bars come from Anthropic's rate-limit headers. A GPT or Qwen reply is priced by neither and counted against neither. Folding its tokens in invents a dollar figure for it and leaves the totals describing a different population than the bars sitting next to them. On the fleet this was written for, that had put $264 of a $724 week on the display for models that cost nothing against the subscription, and the model slots read Gpt, Opus, Qwen3.8 while the per-model bar beside them warned Fable was at 95%.
 
-Detection is by name. A model id naming one of the families `fable`, `opus`, `sonnet` or `haiku` counts, whatever else the id says. Failing that, an id naming a known other vendor (`gpt`, `qwen`, `llama`, `gemini`, `mistral`, `deepseek`, `grok`, `kimi`, `glm`, `command-r`, `phi`) is excluded. Anything else that starts with `claude` counts, priced at Sonnet 4.6 rates, so an Anthropic family newer than this file shows up under an unfamiliar name rather than vanishing. The `claude-` prefix alone proves nothing, because a gateway can hand back ids like `claude-gpt-6-astra`.
+Detection is by name. A model id naming one of the families `fable`, `mythos`, `opus`, `sonnet` or `haiku` counts, whatever else the id says. Failing that, an id naming a known other vendor (`gpt`, `qwen`, `llama`, `gemini`, `mistral`, `deepseek`, `grok`, `kimi`, `glm`, `command-r`, `phi`) is excluded. Anything else that starts with `claude` counts, priced at Sonnet 4.6 rates, so an Anthropic family newer than this file shows up under an unfamiliar name rather than vanishing. The `claude-` prefix alone proves nothing, because a gateway can hand back ids like `claude-gpt-6-astra`.
 
-That leaves one gap. A new Anthropic family whose id does not start with `claude` and does not contain one of the four family names would be dropped until someone adds it to `_ANTHROPIC_FAMILIES`. A model from a vendor missing from the list, and not prefixed `claude`, is also dropped, which is the right outcome by accident.
+That leaves one gap. A new Anthropic family whose id does not start with `claude` and does not contain one of the five family names would be dropped until someone adds it to `_ANTHROPIC_FAMILIES`. A model from a vendor missing from the list, and not prefixed `claude`, is also dropped, which is the right outcome by accident.
 
 `--strict-activity` narrows the streak and sparkline to Anthropic models too, so every number on the display describes one population. `--include-other-models` restores the old behaviour, counting everything at Sonnet 4.6 rates where the price table has no entry. If your gateway bills you per token and you want the display to reflect that spend, or you want the totals to mean "everything Claude Code did today" regardless of the bars, use it. In a fleet, each host filters when it scans, and the poster passes its own setting along when it collects, so hosts it can reach count the same population. A host it couldn't reach, or one that took over on its own timer with different flags, can still disagree. The poster then prints a warning to stderr naming that host rather than summing the mixture in silence. Passing the flag in every host's timer entry keeps that from happening.
 
@@ -171,6 +173,10 @@ If you upgrade with a gateway in use, expect the numbers to move the first time 
 
 The session and weekly percentages come from `anthropic-ratelimit-unified-*` response headers, which every API response carries. Getting them means one `max_tokens: 1` request, which takes about half a second and spawns no `claude` process.
 
+A verified Ultra account has no 5-hour limit, so the API sends no session header and `/usage` draws no Current session bar. The display drops the session bar and shows the weekly reset time instead. An Ultra account that isn't verified yet has a temporary 5-hour limit, so its session bar stays.
+
+Anthropic renamed the plans on 31 October 2026. Max 5x became Max and Max 20x became Ultra, and the display uses the new names. A login from before the rename still reads `max` with a `20x` tier, and hosts in a fleet that run an older copy of this script still report `Max 20x`. Both show as Ultra.
+
 `--usage-method` picks how to read them:
 
 | Value | What it does |
@@ -179,7 +185,7 @@ The session and weekly percentages come from `anthropic-ratelimit-unified-*` res
 | `headers` | Headers only, no PTY at all |
 | `pty` | Drives the `/usage` TUI over a PTY, as earlier versions did |
 
-No header reports the per-model weekly row. Plans that cap one model separately show a third bar in `/usage`, labelled with whichever model that is (Fable at the time of writing, Sonnet before it). That is often the limit you actually run into first, so `auto` reads session and week from the headers on every run and refreshes that one row from the TUI on a slower schedule, caching it in `~/.claude/.trmnl_model_limit` in between.
+No header reports the per-model weekly row. Plans that cap one model separately show a third bar in `/usage`, labelled with whichever model that is (Fable on Max and Ultra at the time of writing, Sonnet before it). That is often the limit you actually run into first, so `auto` reads session and week from the headers on every run and refreshes that one row from the TUI on a slower schedule, caching it in `~/.claude/.trmnl_model_limit` in between.
 
 The refresh interval backs off when there's nothing to watch and tightens when there is: every 60 minutes normally, every 15 once the row is above 80%. `--model-limit-ttl MIN` overrides both. A cached row older than 6 hours is dropped rather than shown, because a weekly limit resets and a stale 95% after a reset is worse than a blank.
 

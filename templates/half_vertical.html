@@ -8,17 +8,21 @@
         </tr>
       </table>
 
-      {% if u_session != "—" %}
+      {% if u_week != "—" %}
       <table class="w--full my--0.5" style="border-collapse:collapse;">
         <tr>
+          {% if u_session != "—" %}
           <td class="title title--small lg:title--large py--0.5"><b>Sess {{ u_session }}%</b></td>
+          {% endif %}
           <td class="title title--small lg:title--large py--0.5"><b>Week {{ u_week }}%</b></td>
           {% if u_sonnet != "—" %}
           <td class="title title--small lg:title--large py--0.5"><b>{{ u_model }} {{ u_sonnet }}%</b></td>
           {% endif %}
         </tr>
         <tr>
+          {% if u_session != "—" %}
           <td class="py--0.5 pr--1"><div class="progress-bar progress-bar--xsmall lg:progress-bar--base"><div class="track"><div class="fill" style="width:{{ u_session }}%"></div></div></div></td>
+          {% endif %}
           <td class="py--0.5 pr--1"><div class="progress-bar progress-bar--xsmall lg:progress-bar--base"><div class="track"><div class="fill" style="width:{{ u_week }}%"></div></div></div></td>
           {% if u_sonnet != "—" %}
           <td class="py--0.5 pr--1"><div class="progress-bar progress-bar--xsmall lg:progress-bar--base"><div class="track"><div class="fill" style="width:{{ u_sonnet }}%"></div></div></div></td>

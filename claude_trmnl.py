@@ -22,18 +22,30 @@ from pathlib import Path
 #
 # Cache writes aren't listed: they're a multiple of the input price and depend
 # on the TTL the request asked for (see CACHE_WRITE_MULT). Cache reads are
-# 0.1x input everywhere except Fable 5.1, which reads at 0.025x.
+# 0.1x input except on Fable/Mythos 5.1 (0.025x) and Opus 5.5 (0.05x).
 
 PRICING = {
     "claude-fable-5-1":  {"input": 10.0, "output": 50.0, "cache_read": 0.25},
     "claude-fable-5":    {"input": 10.0, "output": 50.0, "cache_read": 1.00},
-    # Covers all Opus versions (4.6+ share this price; legacy 4.1/4.0/3 were $15/$75)
+    # Mythos is Fable's Project Glasswing twin: same model, same price.
+    "claude-mythos-5-1": {"input": 10.0, "output": 50.0, "cache_read": 0.25},
+    "claude-mythos-5":   {"input": 10.0, "output": 50.0, "cache_read": 1.00},
+    # Opus 5.5 undercut Opus 5.
+    "claude-opus-5-5":   {"input": 4.0,  "output": 20.0, "cache_read": 0.20},
+    # Every other Opus (4.6+ share this price; legacy 4.1/4.0/3 were $15/$75)
     "claude-opus-5":     {"input": 5.0,  "output": 25.0, "cache_read": 0.50},
-    # Sonnet 5 cut the sticker price; Sonnet 4.6 and earlier stay at $3/$15.
+    # Sonnet 5 cut the sticker price and 5.5 kept it; 4.6 and earlier stay at $3/$15.
     "claude-sonnet-5":   {"input": 2.0,  "output": 10.0, "cache_read": 0.20},
     "claude-sonnet-4-6": {"input": 3.0,  "output": 15.0, "cache_read": 0.30},
+    # Haiku 5.5 has two rate cards, picked by how long the prompt is.
+    "claude-haiku-5-5":  {"input": 0.10, "output": 0.50, "cache_read": 0.01,
+                          "long": {"above": 100_000, "input": 0.50,
+                                   "output": 2.50, "cache_read": 0.05}},
     "claude-haiku-4-5":  {"input": 1.0,  "output": 5.0,  "cache_read": 0.10},
 }
+# Fast mode bills a multiple of the standard rate. Only the models listed here
+# offer it; a response from anywhere else that claims "fast" is billed as is.
+FAST_MULT = {"claude-opus-5-5": 2.0, "claude-opus-5": 2.0}
 # Fallback for models this table doesn't know. Sonnet-4.6 rates, so the cost
 # line stays an estimate rather than a gap. By default this only applies to an
 # Anthropic model newer than this table, since anything else is left out of the
@@ -42,7 +54,7 @@ _DEFAULT_PRICE = {"input": 3.0, "output": 15.0, "cache_read": 0.30}
 
 # Anthropic families. A model naming one of these is Anthropic's whatever else
 # the id says.
-_ANTHROPIC_FAMILIES = ("fable", "opus", "sonnet", "haiku")
+_ANTHROPIC_FAMILIES = ("fable", "mythos", "opus", "sonnet", "haiku")
 
 # Vendors that turn up proxied through a gateway. They matter because such a
 # gateway may hand back an id like "claude-gpt-6-astra": the "claude-" prefix
@@ -92,14 +104,20 @@ def _model_key(name):
     """Collapse a model id onto a pricing key. Only versions that differ in
     price get their own key -- the rest fold into their family."""
     n = name.lower()
-    if "fable" in n:
-        return "claude-fable-5-1" if re.search(r"fable-?5[.-]1", n) else "claude-fable-5"
+
+    def v(family, version):
+        # "claude-opus-5-5", "opus-5.5", "claude-opus-5-5[1m]", but not 5-50.
+        return re.search(r"%s-?%s(?!\d)" % (family, version), n)
+
+    for family in ("fable", "mythos"):
+        if family in n:
+            return f"claude-{family}-5-1" if v(family, r"5[.-]1") else f"claude-{family}-5"
     if "opus" in n:
-        return "claude-opus-5"
+        return "claude-opus-5-5" if v("opus", r"5[.-]5") else "claude-opus-5"
     if "sonnet" in n:
-        return "claude-sonnet-5" if re.search(r"sonnet-?5(?!\d)", n) else "claude-sonnet-4-6"
+        return "claude-sonnet-5" if v("sonnet", "5") else "claude-sonnet-4-6"
     if "haiku" in n:
-        return "claude-haiku-4-5"
+        return "claude-haiku-5-5" if v("haiku", r"5[.-]5") else "claude-haiku-4-5"
     # Filter out synthetic/internal model names
     if not n or n.startswith("<") or n.startswith("_"):
         return None
@@ -109,9 +127,13 @@ def _model_key(name):
 _MODEL_NAMES = {
     "claude-fable-5-1": "Fable",
     "claude-fable-5": "Fable",
+    "claude-mythos-5-1": "Mythos",
+    "claude-mythos-5": "Mythos",
+    "claude-opus-5-5": "Opus",
     "claude-opus-5": "Opus",
     "claude-sonnet-5": "Sonnet",
     "claude-sonnet-4-6": "Sonnet",
+    "claude-haiku-5-5": "Haiku",
     "claude-haiku-4-5": "Haiku",
 }
 
@@ -147,13 +169,21 @@ def _is_anthropic(key):
     return n.startswith("claude")
 
 
-def _calc_cost(mk, inp, out, cw5m, cw1h, cr):
+def _calc_cost(mk, inp, out, cw5m, cw1h, cr, speed=None):
     p = PRICING.get(mk, _DEFAULT_PRICE)
-    return (inp * p["input"]
+    # A long-prompt rate card covers the whole request, cached tokens included,
+    # since they're all part of the prompt the model read.
+    long = p.get("long")
+    if long and inp + cw5m + cw1h + cr > long["above"]:
+        p = long
+    cost = (inp * p["input"]
             + out * p["output"]
             + cw5m * p["input"] * CACHE_WRITE_MULT["5m"]
             + cw1h * p["input"] * CACHE_WRITE_MULT["1h"]
             + cr * p["cache_read"]) / 1_000_000
+    if speed == "fast":
+        cost *= FAST_MULT.get(mk, 1.0)
+    return cost
 
 
 # ── Project name extraction ─────────────────────────────────────────
@@ -184,6 +214,24 @@ def _find_claude_dir():
     return home / ".claude"
 
 
+def _plan_label(sub, tier):
+    """The plan's current name, and a tier only where the name doesn't say it.
+
+    On 2026-10-31 Anthropic renamed Max 5x to Max and Max 20x to Ultra. Tokens
+    issued before that still read subscriptionType "max" with a 5x or 20x
+    rateLimitTier, and fleet hosts on an older copy of this script report
+    ("Max", "20x"), so both spellings resolve here. The multiplier went with the
+    old names: Pro, Max and Ultra say everything it used to.
+    """
+    s = (sub or "").strip().lower()
+    t = (tier or "").strip().lower()
+    if s == "ultra" or (s == "max" and t == "20x"):
+        return "Ultra", ""
+    if s in ("max", "pro"):
+        return s.capitalize(), ""
+    return (sub or "Unknown").capitalize(), "" if t == "standard" else (tier or "")
+
+
 def _read_credentials(claude_dir):
     cred = claude_dir / ".credentials.json"
     if not cred.exists():
@@ -191,14 +239,13 @@ def _read_credentials(claude_dir):
     try:
         data = json.loads(cred.read_text("utf-8"))
         oauth = data.get("claudeAiOauth", {})
-        sub = oauth.get("subscriptionType", "unknown").capitalize()
-        tier = oauth.get("rateLimitTier", "")
-        parts = tier.split("_")
+        sub = oauth.get("subscriptionType", "unknown")
+        parts = (oauth.get("rateLimitTier") or "").split("_")
         tier_short = next(
             (p for p in reversed(parts) if p.endswith("x") and p[:-1].isdigit()),
             "standard",
         )
-        return sub, tier_short
+        return _plan_label(sub, tier_short)
     except Exception:
         return "Unknown", "—"
 
@@ -333,7 +380,7 @@ def _process_jsonl(path, since, daily, models, projects, proj, seen,
                 if mk is None:
                     continue
                 total = inp + out + cr + cw
-                cost = _calc_cost(mk, inp, out, cw5m, cw1h, cr)
+                cost = _calc_cost(mk, inp, out, cw5m, cw1h, cr, u.get("speed"))
                 dk = ts.astimezone().strftime("%Y-%m-%d")
 
                 # A model that isn't Anthropic's has no price in the table and
@@ -836,7 +883,7 @@ def _merge_aggregates(aggs, stale_cut=None):
     for a in sorted((x for x in aggs if isinstance(x, dict)),
                     key=lambda x: float(x.get("ts", 0)), reverse=True):
         if a.get("sub") and a["sub"] != "Unknown":
-            sub, tier = a["sub"], a.get("tier", "—")
+            sub, tier = _plan_label(a["sub"], a.get("tier", ""))
             break
 
     for a in aggs:
@@ -1078,7 +1125,14 @@ def build_payload(usage_method="auto", model_ttl_min=None,
     # Model breakdown (sorted by tokens desc)
     if not include_other:
         models = {k: v for k, v in models.items() if _is_anthropic(k)}
-    models_sorted = sorted(models.items(), key=lambda x: x[1]["tokens"], reverse=True)
+    # Rows are per family, not per pricing key: a week split between Opus 5 and
+    # Opus 5.5 is one Opus row, not two the slots can't tell apart.
+    rows = defaultdict(lambda: {"tokens": 0, "messages": 0, "cost": 0.0})
+    for mk, md in models.items():
+        r = rows[_model_display(mk)]
+        for f in r:
+            r[f] += md.get(f, 0) or 0
+    models_sorted = sorted(rows.items(), key=lambda x: x[1]["tokens"], reverse=True)
     total_model_tokens = sum(m["tokens"] for _, m in models_sorted)
 
     # Date format in local time (Windows vs Unix)
@@ -1125,14 +1179,18 @@ def build_payload(usage_method="auto", model_ttl_min=None,
         # shipped template renders these.
         "o_tokens": fmt_tokens(t_other),
         "o_messages": t_other_msgs,
-        # Usage limits
+        # Usage limits. Verified Ultra accounts have no five-hour limit, so no
+        # session figure exists for them and u_session stays "—".
         "u_session": usage_limits.get("session", {}).get("pct", "—"),
         "u_week": usage_limits.get("week_all", {}).get("pct", "—"),
         # Third limit row: present only on plans that cap one model separately,
         # and the model varies -- u_model carries whichever one the panel named.
         "u_sonnet": usage_limits.get("week_model", {}).get("pct", "—"),
         "u_model": usage_limits.get("week_model", {}).get("name", "Model"),
-        "u_reset": usage_limits.get("session", {}).get("resets", ""),
+        # The nearest reset worth watching: the session's, or the week's when
+        # there's no session limit.
+        "u_reset": (usage_limits.get("session", {}).get("resets")
+                    or usage_limits.get("week_all", {}).get("resets") or ""),
         # Timestamp
         "updated": updated,
     }
@@ -1143,7 +1201,7 @@ def build_payload(usage_method="auto", model_ttl_min=None,
         if i < len(models_sorted):
             mk, md = models_sorted[i]
             pct = int(md["tokens"] / total_model_tokens * 100) if total_model_tokens else 0
-            mv[f"m{idx}_name"] = _model_display(mk)
+            mv[f"m{idx}_name"] = mk
             mv[f"m{idx}_tokens"] = fmt_tokens(md["tokens"])
             mv[f"m{idx}_pct"] = pct
             mv[f"m{idx}_cost"] = fmt_cost(md["cost"])
@@ -1190,8 +1248,8 @@ def post_to_trmnl(merge_variables):
 def _test_payload():
     """Sample payload with multi-model data for previewing the layout."""
     return {
-        "sub": "Max",
-        "tier": "20x",
+        "sub": "Ultra",
+        "tier": "",
         "active": 2,
         "fleet": "2/2",
         "t_input": "1.2M",
@@ -1225,11 +1283,12 @@ def _test_payload():
         "m3_tokens": "2.0M",
         "m3_pct": 7,
         "m3_cost": "$1.60",
-        "u_session": 42,
+        # Ultra-shaped: no five-hour limit, so no session bar.
+        "u_session": "—",
         "u_week": 18,
         "u_sonnet": 5,
         "u_model": "Fable",
-        "u_reset": "in 3h",
+        "u_reset": "Nov 5, 2pm",
     }
 
 
